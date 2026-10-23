@@ -1,0 +1,13 @@
+{
+  "name": "backend-ifter-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "e2e run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "e2e": "0.21.2",
+    "typescript": "^5.9.0"
+  }
+}
