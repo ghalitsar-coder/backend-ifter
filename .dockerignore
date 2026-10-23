@@ -1,0 +1,11 @@
+.git
+.github
+bin
+tmp
+coverage.out
+.env
+configs/config.yaml
+node_modules
+e2e
+README.md
+docs

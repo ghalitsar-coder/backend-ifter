@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://app:app@localhost:5432/app?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Format
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+
+      - name: Migrate
+        run: >-
+          go run -tags postgres
+          github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
+          -path db/migrations -database "$TEST_DATABASE_URL" up
+
+      - run: go test -count=1 ./...
+      - run: go build ./...
+
+      - name: Dependency and vulnerability scan
+        run: |
+          go mod verify
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+      - run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run
