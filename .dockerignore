@@ -1,0 +1,8 @@
+.git
+.github
+.env
+configs/config.yaml
+bin
+tmp
+storage
+coverage.out

@@ -1,0 +1,21 @@
+version: "2"
+
+sql:
+  - engine: "postgresql"
+    # Keep this list in sync with the up migrations.
+    schema:
+      - "db/migrations/000001_extensions.up.sql"
+      - "db/migrations/000002_identity.up.sql"
+      - "db/migrations/000003_master_data.up.sql"
+      - "db/migrations/000004_imports.up.sql"
+      - "db/migrations/000005_attendance.up.sql"
+      - "db/migrations/000006_discipline.up.sql"
+    queries:
+      - "db/query"
+    gen:
+      go:
+        package: "db"
+        out: "internal/db"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_empty_slices: true

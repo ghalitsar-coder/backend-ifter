@@ -1,0 +1,11 @@
+/bin/
+/tmp/
+/storage/
+.env
+configs/config.yaml
+coverage.out
+*.test
+/backups/
+
+/e2e/node_modules/
+/e2e/.e2e/

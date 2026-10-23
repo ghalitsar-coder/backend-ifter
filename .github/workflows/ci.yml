@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ifter
+          POSTGRES_PASSWORD: ifter
+          POSTGRES_DB: ifter
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ifter -d ifter"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Format
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+        env:
+          TEST_DATABASE_URL: postgres://ifter:ifter@localhost:5432/ifter?sslmode=disable
+      - run: go build ./...
+      - name: Dependency and vulnerability scan
+        run: |
+          go mod verify
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run
