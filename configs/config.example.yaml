@@ -1,0 +1,38 @@
+app:
+  name: backend-skeleton
+  env: development
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 15s
+  read_header_timeout: 5s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+  max_body_bytes: 1048576
+  rate_limit_requests: 120
+  rate_limit_window: 1m
+  trusted_proxies: []
+  allowed_origins: []
+
+db:
+  host: localhost
+  port: 5432
+  user: app
+  password: app
+  name: app
+  sslmode: disable
+  max_conns: 10
+  min_conns: 0
+  connect_timeout: 5s
+
+log:
+  level: info
+  format: json
+
+auth:
+  jwt_secret: change-me-to-at-least-32-characters-long
+  jwt_issuer: backend-skeleton
+  jwt_audience: backend-skeleton-api
+  access_token_ttl: 15m
