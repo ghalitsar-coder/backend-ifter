@@ -1,0 +1,59 @@
+app:
+  name: backend-ifter
+  env: development
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 10s
+  read_header_timeout: 5s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+  # Isi IP/CIDR reverse proxy yang boleh mengirim X-Forwarded-For.
+  trusted_proxies: []
+
+db:
+  host: localhost
+  port: 5432
+  user: ifter
+  password: ifter
+  name: ifter
+  sslmode: disable
+  max_conns: 10
+  min_conns: 0
+  connect_timeout: 5s
+
+log:
+  level: info
+  format: text
+
+auth:
+  # Development default only. Set a random value of at least 32 characters
+  # through IFTER_AUTH_JWT_SECRET in every real deployment.
+  jwt_secret: dev-only-change-me-32-characters-minimum
+  jwt_issuer: backend-ifter
+  access_token_ttl: 15m
+  refresh_token_ttl: 168h
+  invite_token_ttl: 72h
+  reset_token_ttl: 1h
+  cookie_secure: false
+  bcrypt_cost: 12
+  allowed_origins:
+    - http://localhost:3000
+  login_rate_limit: 30
+  login_rate_window: 1m
+  bootstrap_admin:
+    username: ""
+    email: ""
+    password: ""
+    full_name: ""
+
+imports:
+  # Direktori privat untuk file import sementara. Jangan disajikan sebagai file statis.
+  dir: ./storage/imports
+  max_file_size: 5242880
+  max_rows: 2000
+  # File asli dihapus setelah 7 hari; error per baris disimpan 30 hari.
+  file_retention: 168h
+  error_retention: 720h
