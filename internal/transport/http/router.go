@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
-	"github.com/ghalitsar-coder/backend-ifter/internal/item"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/response"
@@ -26,7 +25,6 @@ type Deps struct {
 	Metrics   *metrics.Metrics
 	Readiness Readiness
 	Tokens    middleware.TokenParser
-	Items     *item.Service
 	Version   string
 }
 
@@ -85,14 +83,9 @@ func New(d Deps) *gin.Engine {
 
 	// The reference secured group. Delete or rename it when the first real
 	// module is added; keep the auth + RBAC wiring.
-	if d.Items != nil && d.Tokens != nil {
+	if d.Tokens != nil {
 		secured := v1.Group("")
 		secured.Use(middleware.Authenticate(d.Tokens, d.Logger))
-
-		items := newItemHandler(d.Items, d.Logger)
-		secured.GET("/items", items.List)
-		secured.POST("/items", items.Create)
-		secured.GET("/items/:id", items.Get)
 
 		secured.GET("/admin/ping", middleware.RequireRoles("admin"), func(c *gin.Context) {
 			response.JSON(c, http.StatusOK, gin.H{"status": "ok"})

@@ -1,5 +1,5 @@
 app:
-  name: backend-skeleton
+  name: presensi-bakti-asih
   env: development
 
 http:
@@ -14,7 +14,8 @@ http:
   rate_limit_requests: 120
   rate_limit_window: 1m
   trusted_proxies: []
-  allowed_origins: []
+  allowed_origins:
+    - http://localhost:3000
 
 db:
   host: localhost
@@ -33,6 +34,6 @@ log:
 
 auth:
   jwt_secret: change-me-to-at-least-32-characters-long
-  jwt_issuer: backend-skeleton
-  jwt_audience: backend-skeleton-api
-  access_token_ttl: 15m
+  jwt_issuer: presensi-bakti-asih
+  jwt_audience: presensi-bakti-asih-api
+  access_token_ttl: 8h

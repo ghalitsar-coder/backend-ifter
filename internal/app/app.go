@@ -9,7 +9,6 @@ import (
 
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
-	"github.com/ghalitsar-coder/backend-ifter/internal/item"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/database"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/logger"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
@@ -41,7 +40,6 @@ func Run(ctx context.Context) error {
 	m := metrics.New()
 	m.RegisterDBPool(pool)
 
-	itemService := item.NewService(item.NewPostgresRepository(pool))
 	tokens := auth.NewTokenService(cfg.Auth)
 
 	handler := httptransport.New(httptransport.Deps{
@@ -50,7 +48,6 @@ func Run(ctx context.Context) error {
 		Metrics:   m,
 		Readiness: pool,
 		Tokens:    tokens,
-		Items:     itemService,
 		Version:   Version,
 	})
 

@@ -105,7 +105,7 @@ func Load() (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("app.name", "backend-skeleton")
+	v.SetDefault("app.name", "presensi-bakti-asih")
 	v.SetDefault("app.env", "development")
 
 	v.SetDefault("http.host", "0.0.0.0")
@@ -137,9 +137,9 @@ func setDefaults(v *viper.Viper) {
 	// No default secret on purpose: the service must fail fast when it is not
 	// configured instead of silently signing tokens with a well-known value.
 	v.SetDefault("auth.jwt_secret", "")
-	v.SetDefault("auth.jwt_issuer", "backend-skeleton")
-	v.SetDefault("auth.jwt_audience", "backend-skeleton-api")
-	v.SetDefault("auth.access_token_ttl", 15*time.Minute)
+	v.SetDefault("auth.jwt_issuer", "presensi-bakti-asih")
+	v.SetDefault("auth.jwt_audience", "presensi-bakti-asih-api")
+	v.SetDefault("auth.access_token_ttl", 8*time.Hour)
 }
 
 func (c *Config) normalize() {
@@ -210,10 +210,16 @@ func (c *Config) Validate() error {
 		}
 	}
 	for _, origin := range c.HTTP.AllowedOrigins {
+		if origin == "*" {
+			return errors.New(`http.allowed_origins must not contain "*": auth uses httpOnly cookies, so origins must be explicit`)
+		}
 		u, err := url.Parse(origin)
-		if origin != "*" && (err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
-			u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "") {
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
+			u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 			return fmt.Errorf("http.allowed_origins contains an invalid origin %q", origin)
+		}
+		if c.App.Env == "production" && u.Scheme != "https" {
+			return fmt.Errorf("http.allowed_origins must use https in production (got %q)", origin)
 		}
 	}
 
@@ -264,8 +270,8 @@ func (c *Config) Validate() error {
 	if c.Auth.JWTIssuer == "" {
 		return errors.New("auth.jwt_issuer is required")
 	}
-	if c.Auth.AccessTokenTTL <= 0 {
-		return errors.New("auth.access_token_ttl must be greater than zero")
+	if c.Auth.AccessTokenTTL > 24*time.Hour {
+		return errors.New("auth.access_token_ttl must not exceed 24h")
 	}
 	return nil
 }

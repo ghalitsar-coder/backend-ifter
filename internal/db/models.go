@@ -7,12 +7,216 @@ package db
 import (
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Item struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
+type AcademicYear struct {
+	ID         int64       `json:"id"`
+	Nama       string      `json:"nama"`
+	Semester   string      `json:"semester"`
+	TglMulai   pgtype.Date `json:"tgl_mulai"`
+	TglSelesai pgtype.Date `json:"tgl_selesai"`
+	IsActive   bool        `json:"is_active"`
+	CreatedAt  time.Time   `json:"created_at"`
+}
+
+type AttendanceSession struct {
+	ID             int64       `json:"id"`
+	ClassID        int64       `json:"class_id"`
+	ClassSubjectID *int64      `json:"class_subject_id"`
+	RecordedBy     int64       `json:"recorded_by"`
+	Tanggal        pgtype.Date `json:"tanggal"`
+	IsLocked       bool        `json:"is_locked"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type Class struct {
+	ID             int64     `json:"id"`
+	AcademicYearID int64     `json:"academic_year_id"`
+	WaliKelasID    *int64    `json:"wali_kelas_id"`
+	NamaKelas      string    `json:"nama_kelas"`
+	Tingkat        int16     `json:"tingkat"`
+	IsActive       bool      `json:"is_active"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type ClassEnrollment struct {
+	ID        int64       `json:"id"`
+	ClassID   int64       `json:"class_id"`
+	StudentID int64       `json:"student_id"`
+	Status    string      `json:"status"`
+	TglMasuk  pgtype.Date `json:"tgl_masuk"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+type ClassSubject struct {
+	ID        int64     `json:"id"`
+	ClassID   int64     `json:"class_id"`
+	SubjectID int64     `json:"subject_id"`
+	TeacherID int64     `json:"teacher_id"`
 	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type DisciplineInspection struct {
+	ID              int64       `json:"id"`
+	ClassID         int64       `json:"class_id"`
+	InspectorID     int64       `json:"inspector_id"`
+	Tanggal         pgtype.Date `json:"tanggal"`
+	JumlahDiperiksa int32       `json:"jumlah_diperiksa"`
+	Catatan         *string     `json:"catatan"`
+	CreatedAt       time.Time   `json:"created_at"`
+}
+
+type Holiday struct {
+	ID             int64       `json:"id"`
+	AcademicYearID int64       `json:"academic_year_id"`
+	Tanggal        pgtype.Date `json:"tanggal"`
+	Keterangan     string      `json:"keterangan"`
+	Jenis          string      `json:"jenis"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type QrSession struct {
+	ID             int64       `json:"id"`
+	CreatedBy      int64       `json:"created_by"`
+	TokenQr        string      `json:"token_qr"`
+	Tanggal        pgtype.Date `json:"tanggal"`
+	TipeSesi       string      `json:"tipe_sesi"`
+	JamBuka        pgtype.Time `json:"jam_buka"`
+	JamTutup       pgtype.Time `json:"jam_tutup"`
+	BatasTerlambat pgtype.Time `json:"batas_terlambat"`
+	RotasiDetik    int32       `json:"rotasi_detik"`
+	Status         string      `json:"status"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type Role struct {
+	ID        int64     `json:"id"`
+	Kode      string    `json:"kode"`
+	Nama      string    `json:"nama"`
+	Deskripsi *string   `json:"deskripsi"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Staff struct {
+	ID        int64     `json:"id"`
+	UserID    *int64    `json:"user_id"`
+	Nip       *string   `json:"nip"`
+	Nama      string    `json:"nama"`
+	Jabatan   *string   `json:"jabatan"`
+	NoHp      *string   `json:"no_hp"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type StaffAttendance struct {
+	ID              int64              `json:"id"`
+	StaffID         int64              `json:"staff_id"`
+	MasukSessionID  *int64             `json:"masuk_session_id"`
+	PulangSessionID *int64             `json:"pulang_session_id"`
+	CorrectedBy     *int64             `json:"corrected_by"`
+	Tanggal         pgtype.Date        `json:"tanggal"`
+	JamMasuk        pgtype.Timestamptz `json:"jam_masuk"`
+	JamPulang       pgtype.Timestamptz `json:"jam_pulang"`
+	Status          string             `json:"status"`
+	Metode          string             `json:"metode"`
+	Keterangan      *string            `json:"keterangan"`
+	CreatedAt       time.Time          `json:"created_at"`
+}
+
+type StaffAttendanceRecap struct {
+	ID              int64          `json:"id"`
+	StaffID         int64          `json:"staff_id"`
+	VerifiedBy      *int64         `json:"verified_by"`
+	Bulan           int16          `json:"bulan"`
+	Tahun           int16          `json:"tahun"`
+	TotalHariKerja  int32          `json:"total_hari_kerja"`
+	TotalHadir      int32          `json:"total_hadir"`
+	TotalTerlambat  int32          `json:"total_terlambat"`
+	TotalIzin       int32          `json:"total_izin"`
+	TotalSakit      int32          `json:"total_sakit"`
+	TotalAlpa       int32          `json:"total_alpa"`
+	PersentaseHadir pgtype.Numeric `json:"persentase_hadir"`
+	StatusKunci     string         `json:"status_kunci"`
+	CreatedAt       time.Time      `json:"created_at"`
+}
+
+type Student struct {
+	ID           int64     `json:"id"`
+	Nis          *string   `json:"nis"`
+	Nisn         *string   `json:"nisn"`
+	Nama         string    `json:"nama"`
+	JenisKelamin string    `json:"jenis_kelamin"`
+	NoHpOrtu     *string   `json:"no_hp_ortu"`
+	IsActive     bool      `json:"is_active"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type StudentAttendance struct {
+	ID         int64     `json:"id"`
+	SessionID  int64     `json:"session_id"`
+	StudentID  int64     `json:"student_id"`
+	Status     string    `json:"status"`
+	Keterangan *string   `json:"keterangan"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type StudentAttendanceRecap struct {
+	ID              int64          `json:"id"`
+	StudentID       int64          `json:"student_id"`
+	ClassID         int64          `json:"class_id"`
+	VerifiedBy      *int64         `json:"verified_by"`
+	Bulan           int16          `json:"bulan"`
+	Tahun           int16          `json:"tahun"`
+	TotalHadir      int32          `json:"total_hadir"`
+	TotalSakit      int32          `json:"total_sakit"`
+	TotalIzin       int32          `json:"total_izin"`
+	TotalAlpa       int32          `json:"total_alpa"`
+	PersentaseHadir pgtype.Numeric `json:"persentase_hadir"`
+	StatusKunci     string         `json:"status_kunci"`
+	CreatedAt       time.Time      `json:"created_at"`
+}
+
+type StudentViolation struct {
+	ID              int64     `json:"id"`
+	InspectionID    int64     `json:"inspection_id"`
+	StudentID       int64     `json:"student_id"`
+	ViolationTypeID int64     `json:"violation_type_id"`
+	Poin            int32     `json:"poin"`
+	Keterangan      *string   `json:"keterangan"`
+	TindakLanjut    *string   `json:"tindak_lanjut"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+type Subject struct {
+	ID        int64     `json:"id"`
+	Kode      string    `json:"kode"`
+	Nama      string    `json:"nama"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type User struct {
+	ID           int64     `json:"id"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"password_hash"`
+	IsActive     bool      `json:"is_active"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type UserRole struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	RoleID    int64     `json:"role_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ViolationType struct {
+	ID          int64     `json:"id"`
+	Kode        string    `json:"kode"`
+	Nama        string    `json:"nama"`
+	Kategori    string    `json:"kategori"`
+	PoinDefault int32     `json:"poin_default"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
 }
