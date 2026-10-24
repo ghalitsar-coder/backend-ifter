@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ghalitsar-coder/backend-ifter/internal/attendance"
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
-	"github.com/ghalitsar-coder/backend-ifter/internal/item"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/database"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/logger"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
@@ -41,17 +41,17 @@ func Run(ctx context.Context) error {
 	m := metrics.New()
 	m.RegisterDBPool(pool)
 
-	itemService := item.NewService(item.NewPostgresRepository(pool))
+	attendanceService := attendance.NewService(attendance.NewPostgresRepository(pool))
 	tokens := auth.NewTokenService(cfg.Auth)
 
 	handler := httptransport.New(httptransport.Deps{
-		Config:    cfg,
-		Logger:    log,
-		Metrics:   m,
-		Readiness: pool,
-		Tokens:    tokens,
-		Items:     itemService,
-		Version:   Version,
+		Config:     cfg,
+		Logger:     log,
+		Metrics:    m,
+		Readiness:  pool,
+		Tokens:     tokens,
+		Attendance: attendanceService,
+		Version:    Version,
 	})
 
 	server := &http.Server{

@@ -8,7 +8,7 @@ cmd/api
         ├── internal/transport/http
         │     ├── middleware
         │     └── response
-        ├── internal/item       (service + repository + domain types)
+        ├── internal/attendance   (service + repository + domain types)
         ├── internal/auth       (token service)
         ├── internal/config
         └── internal/platform   (database, logger, metrics)
@@ -53,7 +53,7 @@ limited.
 ## Error handling
 
 - Domain errors are sentinels in the service package (`ErrNotFound`,
-  `ErrInvalidName`).
+  `ErrForbidden`).
 - Handlers translate them with `errors.Is`. Unexpected errors are logged with
   the request ID and returned as a generic `500`.
 - PostgreSQL errors are classified in `platform/database` (`IsNotFound`,

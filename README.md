@@ -5,8 +5,8 @@ auth, structured logging, metrics, health checks, graceful shutdown, and CI
 gates wired from day one.
 
 It is intentionally small. Every file exists to demonstrate a rule the team
-should keep, not to guess at future features. Replace the `item` module with the
-first real domain module and grow from there.
+should keep, not to guess at future features. The reference `item` module was
+replaced by the `attendance` module (student attendance).
 
 ## Stack
 
@@ -34,7 +34,7 @@ internal/
   auth/                 # JWT issue/parse
   config/               # typed config + validation
   db/                   # sqlc-generated code (do not edit)
-  item/                 # reference module: types, repository, service
+  attendance/           # student attendance: types, repository, service
   platform/
     database/           # pgx pool, transactions, error mapping
     logger/             # slog construction
@@ -43,7 +43,7 @@ internal/
     response/           # single response envelope
     middleware/         # request-id, auth, RBAC, CORS, rate limit, metrics, recovery
     router.go           # route table and middleware wiring
-    items.go            # handler for the reference module
+    attendance.go       # handler for student attendance
 db/
   migrations/           # versioned schema migrations
   query/                # sqlc queries
@@ -64,18 +64,22 @@ no HTTP or SQL details.
 cp configs/config.example.yaml configs/config.yaml   # or: cp .env.example .env
 docker compose up -d postgres
 make migrate-up
+docker compose exec -T postgres psql -U app -d app < db/seed/demo.sql   # local demo data
 make run
 ```
 
-Mint a development token and call the reference module:
+Mint a development token and record attendance (the token subject must be a
+`users.id` linked to an active `staff` row):
 
 ```bash
-TOKEN="$(make -s token SUB=demo ROLE=admin)"
-curl -s localhost:8080/v1/items -H "Authorization: Bearer $TOKEN"
-curl -s -X POST localhost:8080/v1/items \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"first item"}'
+TOKEN="$(make -s token SUB=1 ROLE=guru)"
+curl -s -X POST localhost:8080/v1/attendance-sessions \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"class_id":1,"tanggal":"2026-10-24"}'
+curl -s -X PUT localhost:8080/v1/attendance-sessions/1/attendances \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"attendances":[{"student_id":1,"status":"hadir"},{"student_id":2,"status":"sakit","keterangan":"demam"}]}'
+curl -s localhost:8080/v1/attendance-sessions/1 -H "Authorization: Bearer $TOKEN"
 ```
 
 Full stack in containers (runs migrations first):
@@ -121,9 +125,10 @@ All responses use one envelope:
 | GET | `/metrics` | none | Prometheus metrics |
 | GET | `/` | none | Service metadata |
 | GET | `/v1/version` | none | Build version |
-| GET | `/v1/items` | Bearer | Paginated list (`page`, `per_page`) |
-| POST | `/v1/items` | Bearer | Create |
-| GET | `/v1/items/:id` | Bearer | Fetch one |
+| GET | `/v1/attendance-sessions/:id` | Bearer | Session detail with class roster and saved statuses |
+| POST | `/v1/attendance-sessions` | Bearer + `guru`/`tu`/`admin` | Create (or fetch) a session; idempotent per class/date/subject |
+| PUT | `/v1/attendance-sessions/:id/attendances` | Bearer + `guru`/`tu`/`admin` | Upsert student statuses (`hadir`, `sakit`, `izin`, `alpa`) |
+| POST | `/v1/attendance-sessions/:id/lock` | Bearer + `guru`/`tu`/`admin` | Lock the session; later writes return `409` |
 | GET | `/v1/admin/ping` | Bearer + `admin` role | RBAC example |
 
 ## Adding a module
@@ -139,8 +144,6 @@ All responses use one envelope:
    in `internal/transport/http/router.go`.
 6. Add a service unit test with a fake repository and an integration test guarded
    by `TEST_DATABASE_URL`.
-
-Delete `internal/item`, `items.go`, and their tests once a real module exists.
 
 ## Quality gates
 
@@ -169,3 +172,9 @@ committed so builds do not need the generator.
 - **TLS terminates at the proxy.** The app speaks plain HTTP inside the cluster.
 - **Migrations are a separate step.** The app never mutates the schema on boot;
   `compose.yaml` runs a one-shot migrate service.
+- **Student attendance scope.** Sessions, per-student statuses, roster reads, and
+  locking are implemented. Monthly `student_attendance_recaps` snapshots are not
+  generated yet; add a recap job when TU reporting is needed.
+- **Attendance identity.** The JWT subject is the numeric `users.id`; it is
+  resolved to `staff.user_id`. `tu`/`admin` may record for any class, `guru` only
+  for classes they teach or are wali kelas of.
