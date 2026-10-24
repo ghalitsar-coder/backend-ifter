@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ghalitsar-coder/backend-ifter/internal/attendance"
+	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
@@ -26,6 +27,8 @@ type Deps struct {
 	Metrics    *metrics.Metrics
 	Readiness  Readiness
 	Tokens     middleware.TokenParser
+	Auth       *auth.LoginService
+	Register   *auth.RegisterService
 	Attendance *attendance.Service
 	Version    string
 }
@@ -83,14 +86,24 @@ func New(d Deps) *gin.Engine {
 		response.JSON(c, http.StatusOK, gin.H{"version": d.Version})
 	})
 
-	// The reference secured group. Delete or rename it when the first real
-	// module is added; keep the auth + RBAC wiring.
+	// Public inside /v1, so the body limit and rate limit still apply but
+	// authentication does not.
+	if d.Auth != nil {
+		h := newAuthHandler(d.Auth, d.Register, d.Logger)
+		v1.POST("/auth/login", h.Login)
+		if d.Register != nil {
+			v1.POST("/auth/register", h.Register)
+		}
+	}
+
+	// Secured group: every attendance route below requires a signed-in user.
 	if d.Attendance != nil && d.Tokens != nil {
 		secured := v1.Group("")
 		secured.Use(middleware.Authenticate(d.Tokens, d.Logger))
 
 		attendanceHandler := newAttendanceHandler(d.Attendance, d.Logger)
 		write := middleware.RequireRoles("guru", "tu", "admin")
+		secured.GET("/classes", attendanceHandler.ListClasses)
 		secured.POST("/attendance-sessions", write, attendanceHandler.CreateSession)
 		secured.GET("/attendance-sessions/:id", attendanceHandler.GetSession)
 		secured.PUT("/attendance-sessions/:id/attendances", write, attendanceHandler.Record)

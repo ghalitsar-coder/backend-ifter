@@ -57,8 +57,12 @@ func (h *attendanceHandler) GetSession(c *gin.Context) {
 	if !ok {
 		return
 	}
+	actor, ok := h.actor(c)
+	if !ok {
+		return
+	}
 
-	detail, err := h.service.GetSession(c.Request.Context(), id)
+	detail, err := h.service.GetSession(c.Request.Context(), actor.SchoolID, id)
 	if err != nil {
 		h.writeError(c, err)
 		return
@@ -115,6 +119,20 @@ func (h *attendanceHandler) Lock(c *gin.Context) {
 	response.JSON(c, http.StatusOK, locked)
 }
 
+func (h *attendanceHandler) ListClasses(c *gin.Context) {
+	actor, ok := h.actor(c)
+	if !ok {
+		return
+	}
+
+	classes, err := h.service.ListClasses(c.Request.Context(), actor.SchoolID)
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
+	response.JSON(c, http.StatusOK, classes)
+}
+
 func (h *attendanceHandler) actor(c *gin.Context) (attendance.Actor, bool) {
 	claims, ok := middleware.CurrentClaims(c)
 	if !ok {
@@ -126,6 +144,10 @@ func (h *attendanceHandler) actor(c *gin.Context) (attendance.Actor, bool) {
 		response.Error(c, http.StatusForbidden, "invalid_subject", "token subject must be a user id")
 		return attendance.Actor{}, false
 	}
+	if claims.SchoolID <= 0 {
+		response.Error(c, http.StatusForbidden, "invalid_school", "token must carry a school id")
+		return attendance.Actor{}, false
+	}
 
 	manage := false
 	for _, role := range claims.Roles {
@@ -134,7 +156,7 @@ func (h *attendanceHandler) actor(c *gin.Context) (attendance.Actor, bool) {
 			break
 		}
 	}
-	return attendance.Actor{UserID: userID, Manage: manage}, true
+	return attendance.Actor{UserID: userID, SchoolID: claims.SchoolID, Manage: manage}, true
 }
 
 func (h *attendanceHandler) writeError(c *gin.Context, err error) {

@@ -15,13 +15,15 @@ import (
 // fake; production uses PostgresRepository.
 type Repository interface {
 	StaffIDByUserID(ctx context.Context, userID int64) (int64, error)
-	CanRecord(ctx context.Context, staffID, classID int64, classSubjectID *int64) (bool, error)
+	CanRecord(ctx context.Context, staffID, classID, schoolID int64, classSubjectID *int64) (bool, error)
+	ClassInSchool(ctx context.Context, classID, schoolID int64) (bool, error)
 	CreateSession(ctx context.Context, classID, recordedBy int64, classSubjectID *int64, tanggal time.Time) (Session, error)
-	GetSession(ctx context.Context, id int64) (Session, error)
+	GetSession(ctx context.Context, id, schoolID int64) (Session, error)
 	ListAttendances(ctx context.Context, sessionID, classID int64) ([]Attendance, error)
 	CountEnrolledStudents(ctx context.Context, classID int64, studentIDs []int64) (int64, error)
 	RecordAttendances(ctx context.Context, sessionID int64, attendances []AttendanceInput) error
 	LockSession(ctx context.Context, id int64) (Session, error)
+	ListClasses(ctx context.Context, schoolID int64) ([]Class, error)
 }
 
 type PostgresRepository struct {
@@ -37,12 +39,17 @@ func (r *PostgresRepository) StaffIDByUserID(ctx context.Context, userID int64) 
 	return r.queries.StaffIDByUserID(ctx, userID)
 }
 
-func (r *PostgresRepository) CanRecord(ctx context.Context, staffID, classID int64, classSubjectID *int64) (bool, error) {
+func (r *PostgresRepository) CanRecord(ctx context.Context, staffID, classID, schoolID int64, classSubjectID *int64) (bool, error) {
 	return r.queries.CanRecordAttendance(ctx, db.CanRecordAttendanceParams{
 		ClassID:        classID,
+		SchoolID:       schoolID,
 		ClassSubjectID: classSubjectID,
 		StaffID:        staffID,
 	})
+}
+
+func (r *PostgresRepository) ClassInSchool(ctx context.Context, classID, schoolID int64) (bool, error) {
+	return r.queries.ClassInSchool(ctx, db.ClassInSchoolParams{ClassID: classID, SchoolID: schoolID})
 }
 
 func (r *PostgresRepository) CreateSession(ctx context.Context, classID, recordedBy int64, classSubjectID *int64, tanggal time.Time) (Session, error) {
@@ -66,8 +73,8 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, classID, recorde
 	}, nil
 }
 
-func (r *PostgresRepository) GetSession(ctx context.Context, id int64) (Session, error) {
-	row, err := r.queries.GetAttendanceSession(ctx, id)
+func (r *PostgresRepository) GetSession(ctx context.Context, id, schoolID int64) (Session, error) {
+	row, err := r.queries.GetAttendanceSession(ctx, db.GetAttendanceSessionParams{ID: id, SchoolID: schoolID})
 	if err != nil {
 		return Session{}, err
 	}
@@ -135,6 +142,23 @@ func (r *PostgresRepository) LockSession(ctx context.Context, id int64) (Session
 		return Session{}, err
 	}
 	return toSession(row), nil
+}
+
+func (r *PostgresRepository) ListClasses(ctx context.Context, schoolID int64) ([]Class, error) {
+	rows, err := r.queries.ListActiveClasses(ctx, schoolID)
+	if err != nil {
+		return nil, err
+	}
+	classes := make([]Class, 0, len(rows))
+	for _, row := range rows {
+		classes = append(classes, Class{
+			ID:        row.ID,
+			NamaKelas: row.NamaKelas,
+			Tingkat:   int(row.Tingkat),
+			WaliKelas: row.WaliKelas,
+		})
+	}
+	return classes, nil
 }
 
 func toSession(row db.AttendanceSession) Session {

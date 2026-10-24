@@ -47,11 +47,11 @@ func TestAuthenticateAndRequireRoles(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	adminToken, err := tokens.Issue("admin-1", []string{"admin"})
+	adminToken, err := tokens.Issue("admin-1", []string{"admin"}, 1)
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
 	}
-	viewerToken, err := tokens.Issue("viewer-1", []string{"viewer"})
+	viewerToken, err := tokens.Issue("viewer-1", []string{"viewer"}, 1)
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
 	}

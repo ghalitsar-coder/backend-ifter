@@ -63,4 +63,4 @@ sqlc: ## Regenerate the typed data layer
 	sqlc generate
 
 token: ## Mint a dev token: make token SUB=dev ROLE=admin
-	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; go run ./cmd/token -sub "$(or $(SUB),1)" -roles "$(or $(ROLE),admin)"
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; go run ./cmd/token -sub "$(or $(SUB),1)" -roles "$(or $(ROLE),admin)" -school "$(or $(SCHOOL),1)"

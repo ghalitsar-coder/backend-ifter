@@ -13,10 +13,11 @@ import (
 
 var ErrInvalidToken = errors.New("invalid token")
 
-// Claims is the access-token payload. Roles are embedded so authorization
-// checks do not need a database round trip on every request.
+// Claims is the access-token payload. Roles and school are embedded so
+// authorization checks do not need a database round trip on every request.
 type Claims struct {
-	Roles []string `json:"roles,omitempty"`
+	SchoolID int64    `json:"school_id"`
+	Roles    []string `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -36,13 +37,17 @@ func NewTokenService(cfg config.AuthConfig) *TokenService {
 	}
 }
 
-func (s *TokenService) Issue(subject string, roles []string) (string, error) {
+func (s *TokenService) Issue(subject string, roles []string, schoolID int64) (string, error) {
 	if subject == "" {
 		return "", errors.New("token subject is required")
 	}
+	if schoolID <= 0 {
+		return "", errors.New("token school is required")
+	}
 	now := time.Now()
 	claims := Claims{
-		Roles: roles,
+		SchoolID: schoolID,
+		Roles:    roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   subject,
 			Issuer:    s.issuer,
@@ -80,6 +85,9 @@ func (s *TokenService) Parse(raw string) (*Claims, error) {
 	}
 	if claims.Subject == "" {
 		return nil, fmt.Errorf("%w: missing subject", ErrInvalidToken)
+	}
+	if claims.SchoolID <= 0 {
+		return nil, fmt.Errorf("%w: missing school", ErrInvalidToken)
 	}
 	return claims, nil
 }

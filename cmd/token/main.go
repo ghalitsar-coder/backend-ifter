@@ -15,6 +15,7 @@ import (
 func main() {
 	subject := flag.String("sub", "dev-user", "token subject")
 	rolesFlag := flag.String("roles", "admin", "comma-separated roles")
+	schoolID := flag.Int64("school", 1, "school id")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -29,7 +30,7 @@ func main() {
 		}
 	}
 
-	token, err := auth.NewTokenService(cfg.Auth).Issue(*subject, roles)
+	token, err := auth.NewTokenService(cfg.Auth).Issue(*subject, roles, *schoolID)
 	if err != nil {
 		log.Fatalf("issue token: %v", err)
 	}

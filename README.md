@@ -18,7 +18,7 @@ replaced by the `attendance` module (student attendance).
 | Database | PostgreSQL + `pgx/v5` |
 | Queries | `sqlc` (typed, generated) |
 | Migrations | `golang-migrate` (versioned up/down) |
-| Auth | JWT HS256, roles claim, middleware + RBAC |
+| Auth | JWT HS256, roles + school claims, middleware + RBAC |
 | Logging | `log/slog` (JSON in production) |
 | Metrics | Prometheus (`/metrics`) |
 | Lint / CI | golangci-lint v2, GitHub Actions |
@@ -31,7 +31,7 @@ cmd/
   token/                # local dev token minting
 internal/
   app/                  # composition root, HTTP server, graceful shutdown
-  auth/                 # JWT issue/parse
+  auth/                 # JWT issue/parse, login and school registration
   config/               # typed config + validation
   db/                   # sqlc-generated code (do not edit)
   attendance/           # student attendance: types, repository, service
@@ -43,7 +43,8 @@ internal/
     response/           # single response envelope
     middleware/         # request-id, auth, RBAC, CORS, rate limit, metrics, recovery
     router.go           # route table and middleware wiring
-    attendance.go       # handler for student attendance
+    attendance.go       # handler for student attendance and the class list
+    auth.go             # login and registration handlers
 db/
   migrations/           # versioned schema migrations
   query/                # sqlc queries
@@ -68,11 +69,13 @@ docker compose exec -T postgres psql -U app -d app < db/seed/demo.sql   # local 
 make run
 ```
 
-Mint a development token and record attendance (the token subject must be a
-`users.id` linked to an active `staff` row):
+Sign in with the seeded guru (`db/seed/demo.sql` stores the password
+`guru123`) and record attendance:
 
 ```bash
-TOKEN="$(make -s token SUB=1 ROLE=guru)"
+TOKEN="$(curl -s -X POST localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"guru1","password":"guru123"}' | jq -r .data.token)"
+curl -s localhost:8080/v1/classes -H "Authorization: Bearer $TOKEN"
 curl -s -X POST localhost:8080/v1/attendance-sessions \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"class_id":1,"tanggal":"2026-10-24"}'
@@ -81,6 +84,24 @@ curl -s -X PUT localhost:8080/v1/attendance-sessions/1/attendances \
   -d '{"attendances":[{"student_id":1,"status":"hadir"},{"student_id":2,"status":"sakit","keterangan":"demam"}]}'
 curl -s localhost:8080/v1/attendance-sessions/1 -H "Authorization: Bearer $TOKEN"
 ```
+
+Register a new school and its admin in one call. The response carries an access
+token, so the client is signed in immediately:
+
+```bash
+curl -s -X POST localhost:8080/v1/auth/register -H 'Content-Type: application/json' \
+  -d '{"school_name":"SMP Negeri 1 Sleman","npsn":"20501234","jenjang":"SMP",
+       "admin_name":"Drs. Hendra","email":"admin@smpn1sleman.sch.id",
+       "phone":"081234567890","password":"HadirTerus2026"}'
+```
+
+The new school starts with no academic year or classes, so `/v1/classes` returns
+an empty list until they are provisioned. Registrations never leak into the demo
+school: every query is scoped to the caller's `school_id`.
+
+`make token SUB=1 ROLE=guru` mints the same token without a password; its
+subject must be a `users.id` linked to an active `staff` row. Add `SCHOOL=2` to
+mint a token for another tenant.
 
 Full stack in containers (runs migrations first):
 
@@ -125,6 +146,9 @@ All responses use one envelope:
 | GET | `/metrics` | none | Prometheus metrics |
 | GET | `/` | none | Service metadata |
 | GET | `/v1/version` | none | Build version |
+| POST | `/v1/auth/login` | none | Exchange username/password for an access token (`guru1` / `guru123` in the demo seed) |
+| POST | `/v1/auth/register` | none | Register a school plus its admin user and return an access token (`201`; `409` on duplicate NPSN or email) |
+| GET | `/v1/classes` | Bearer | Classes of the active academic year, with `wali_kelas` |
 | GET | `/v1/attendance-sessions/:id` | Bearer | Session detail with class roster and saved statuses |
 | POST | `/v1/attendance-sessions` | Bearer + `guru`/`tu`/`admin` | Create (or fetch) a session; idempotent per class/date/subject |
 | PUT | `/v1/attendance-sessions/:id/attendances` | Bearer + `guru`/`tu`/`admin` | Upsert student statuses (`hadir`, `sakit`, `izin`, `alpa`) |
@@ -178,3 +202,10 @@ committed so builds do not need the generator.
 - **Attendance identity.** The JWT subject is the numeric `users.id`; it is
   resolved to `staff.user_id`. `tu`/`admin` may record for any class, `guru` only
   for classes they teach or are wali kelas of.
+- **Tenant scoping.** Every access token carries `school_id`. Class, session, and
+  roster queries filter on the school of the active academic year, so an ID from
+  another tenant behaves like a missing one (`404`, or `403` for a session
+  write). Registration writes the school, admin user, staff row, and `admin`
+  role in one statement; a duplicate NPSN or email rolls the whole thing back.
+- **Demo login.** `db/seed/demo.sql` stores `guru123` for `guru1`/`tu1`; the
+  seeded school uses NPSN `00000000`. These are fixtures, not a bootstrap path.

@@ -11,13 +11,15 @@ import (
 
 type fakeRepository struct {
 	staffFn   func(ctx context.Context, userID int64) (int64, error)
-	canFn     func(ctx context.Context, staffID, classID int64, subjectID *int64) (bool, error)
+	canFn     func(ctx context.Context, staffID, classID, schoolID int64, subjectID *int64) (bool, error)
+	classFn   func(ctx context.Context, classID, schoolID int64) (bool, error)
 	createFn  func(ctx context.Context, classID, recordedBy int64, subjectID *int64, tanggal time.Time) (Session, error)
-	getFn     func(ctx context.Context, id int64) (Session, error)
+	getFn     func(ctx context.Context, id, schoolID int64) (Session, error)
 	listFn    func(ctx context.Context, sessionID, classID int64) ([]Attendance, error)
 	countFn   func(ctx context.Context, classID int64, studentIDs []int64) (int64, error)
 	recordFn  func(ctx context.Context, sessionID int64, attendances []AttendanceInput) error
 	lockFn    func(ctx context.Context, id int64) (Session, error)
+	classesFn func(ctx context.Context, schoolID int64) ([]Class, error)
 	canCalled bool
 }
 
@@ -25,17 +27,21 @@ func (f *fakeRepository) StaffIDByUserID(ctx context.Context, userID int64) (int
 	return f.staffFn(ctx, userID)
 }
 
-func (f *fakeRepository) CanRecord(ctx context.Context, staffID, classID int64, subjectID *int64) (bool, error) {
+func (f *fakeRepository) CanRecord(ctx context.Context, staffID, classID, schoolID int64, subjectID *int64) (bool, error) {
 	f.canCalled = true
-	return f.canFn(ctx, staffID, classID, subjectID)
+	return f.canFn(ctx, staffID, classID, schoolID, subjectID)
+}
+
+func (f *fakeRepository) ClassInSchool(ctx context.Context, classID, schoolID int64) (bool, error) {
+	return f.classFn(ctx, classID, schoolID)
 }
 
 func (f *fakeRepository) CreateSession(ctx context.Context, classID, recordedBy int64, subjectID *int64, tanggal time.Time) (Session, error) {
 	return f.createFn(ctx, classID, recordedBy, subjectID, tanggal)
 }
 
-func (f *fakeRepository) GetSession(ctx context.Context, id int64) (Session, error) {
-	return f.getFn(ctx, id)
+func (f *fakeRepository) GetSession(ctx context.Context, id, schoolID int64) (Session, error) {
+	return f.getFn(ctx, id, schoolID)
 }
 
 func (f *fakeRepository) ListAttendances(ctx context.Context, sessionID, classID int64) ([]Attendance, error) {
@@ -54,6 +60,10 @@ func (f *fakeRepository) LockSession(ctx context.Context, id int64) (Session, er
 	return f.lockFn(ctx, id)
 }
 
+func (f *fakeRepository) ListClasses(ctx context.Context, schoolID int64) ([]Class, error) {
+	return f.classesFn(ctx, schoolID)
+}
+
 func TestCreateSessionValidatesInputBeforeRepository(t *testing.T) {
 	// All repo funcs are nil: invalid input must fail first.
 	svc := NewService(&fakeRepository{})
@@ -63,7 +73,7 @@ func TestCreateSessionValidatesInputBeforeRepository(t *testing.T) {
 		{ClassID: 1, Tanggal: "24-10-2026"},
 	}
 	for _, in := range tests {
-		if _, err := svc.CreateSession(context.Background(), Actor{UserID: 1}, in); !errors.Is(err, ErrInvalidClass) &&
+		if _, err := svc.CreateSession(context.Background(), Actor{UserID: 1, SchoolID: 1}, in); !errors.Is(err, ErrInvalidClass) &&
 			!errors.Is(err, ErrInvalidSubject) && !errors.Is(err, ErrInvalidDate) {
 			t.Errorf("CreateSession(%+v) error = %v, want a validation error", in, err)
 		}
@@ -75,7 +85,7 @@ func TestCreateSessionRequiresLinkedStaff(t *testing.T) {
 		staffFn: func(context.Context, int64) (int64, error) { return 0, pgx.ErrNoRows },
 	})
 
-	_, err := svc.CreateSession(context.Background(), Actor{UserID: 9}, CreateSessionInput{ClassID: 1, Tanggal: "2026-10-24"})
+	_, err := svc.CreateSession(context.Background(), Actor{UserID: 9, SchoolID: 1}, CreateSessionInput{ClassID: 1, Tanggal: "2026-10-24"})
 	if !errors.Is(err, ErrNotStaff) {
 		t.Fatalf("error = %v, want ErrNotStaff", err)
 	}
@@ -84,10 +94,10 @@ func TestCreateSessionRequiresLinkedStaff(t *testing.T) {
 func TestCreateSessionEnforcesTeacherOwnership(t *testing.T) {
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		canFn:   func(context.Context, int64, int64, *int64) (bool, error) { return false, nil },
+		canFn:   func(context.Context, int64, int64, int64, *int64) (bool, error) { return false, nil },
 	})
 
-	_, err := svc.CreateSession(context.Background(), Actor{UserID: 1}, CreateSessionInput{ClassID: 2, Tanggal: "2026-10-24"})
+	_, err := svc.CreateSession(context.Background(), Actor{UserID: 1, SchoolID: 1}, CreateSessionInput{ClassID: 2, Tanggal: "2026-10-24"})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("error = %v, want ErrForbidden", err)
 	}
@@ -97,7 +107,8 @@ func TestCreateSessionManageBypassesOwnership(t *testing.T) {
 	var gotStaffID int64
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		canFn: func(context.Context, int64, int64, *int64) (bool, error) {
+		classFn: func(context.Context, int64, int64) (bool, error) { return true, nil },
+		canFn: func(context.Context, int64, int64, int64, *int64) (bool, error) {
 			t.Fatal("CanRecord must not be called for manage roles")
 			return false, nil
 		},
@@ -107,7 +118,7 @@ func TestCreateSessionManageBypassesOwnership(t *testing.T) {
 		},
 	})
 
-	created, err := svc.CreateSession(context.Background(), Actor{UserID: 1, Manage: true}, CreateSessionInput{ClassID: 2, Tanggal: "2026-10-24"})
+	created, err := svc.CreateSession(context.Background(), Actor{UserID: 1, SchoolID: 1, Manage: true}, CreateSessionInput{ClassID: 2, Tanggal: "2026-10-24"})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
@@ -124,14 +135,14 @@ func TestCreateSessionPassesSubject(t *testing.T) {
 	var got *int64
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		canFn:   func(context.Context, int64, int64, *int64) (bool, error) { return true, nil },
+		canFn:   func(context.Context, int64, int64, int64, *int64) (bool, error) { return true, nil },
 		createFn: func(_ context.Context, classID, recordedBy int64, subject *int64, tanggal time.Time) (Session, error) {
 			got = subject
 			return Session{ID: 1}, nil
 		},
 	})
 
-	if _, err := svc.CreateSession(context.Background(), Actor{UserID: 1}, CreateSessionInput{ClassID: 2, ClassSubjectID: &subjectID, Tanggal: "2026-10-24"}); err != nil {
+	if _, err := svc.CreateSession(context.Background(), Actor{UserID: 1, SchoolID: 1}, CreateSessionInput{ClassID: 2, ClassSubjectID: &subjectID, Tanggal: "2026-10-24"}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	if got == nil || *got != subjectID {
@@ -148,7 +159,7 @@ func TestRecordValidatesEntries(t *testing.T) {
 		{{StudentID: 1, Status: "hadir"}, {StudentID: 1, Status: "izin"}},
 	}
 	for _, entries := range tests {
-		_, err := svc.Record(context.Background(), Actor{UserID: 1}, RecordInput{SessionID: 1, Attendances: entries})
+		_, err := svc.Record(context.Background(), Actor{UserID: 1, SchoolID: 1}, RecordInput{SessionID: 1, Attendances: entries})
 		if !errors.Is(err, ErrEmptyAttendances) && !errors.Is(err, ErrInvalidStatus) &&
 			!errors.Is(err, ErrInvalidStudent) && !errors.Is(err, ErrDuplicateStudent) {
 			t.Errorf("Record(%+v) error = %v, want a validation error", entries, err)
@@ -159,19 +170,19 @@ func TestRecordValidatesEntries(t *testing.T) {
 func TestRecordMapsNotFoundAndLocked(t *testing.T) {
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		getFn:   func(context.Context, int64) (Session, error) { return Session{}, pgx.ErrNoRows },
+		getFn:   func(context.Context, int64, int64) (Session, error) { return Session{}, pgx.ErrNoRows },
 	})
 	in := RecordInput{SessionID: 1, Attendances: []AttendanceInput{{StudentID: 1, Status: "hadir"}}}
-	if _, err := svc.Record(context.Background(), Actor{UserID: 1}, in); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.Record(context.Background(), Actor{UserID: 1, SchoolID: 1}, in); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing session error = %v, want ErrNotFound", err)
 	}
 
 	svc = NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		getFn:   func(context.Context, int64) (Session, error) { return Session{ID: 1, IsLocked: true}, nil },
-		canFn:   func(context.Context, int64, int64, *int64) (bool, error) { return true, nil },
+		getFn:   func(context.Context, int64, int64) (Session, error) { return Session{ID: 1, IsLocked: true}, nil },
+		canFn:   func(context.Context, int64, int64, int64, *int64) (bool, error) { return true, nil },
 	})
-	if _, err := svc.Record(context.Background(), Actor{UserID: 1}, in); !errors.Is(err, ErrLocked) {
+	if _, err := svc.Record(context.Background(), Actor{UserID: 1, SchoolID: 1}, in); !errors.Is(err, ErrLocked) {
 		t.Errorf("locked session error = %v, want ErrLocked", err)
 	}
 }
@@ -179,12 +190,12 @@ func TestRecordMapsNotFoundAndLocked(t *testing.T) {
 func TestRecordRejectsUnenrolledStudent(t *testing.T) {
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		getFn:   func(context.Context, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
-		canFn:   func(context.Context, int64, int64, *int64) (bool, error) { return true, nil },
+		getFn:   func(context.Context, int64, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
+		canFn:   func(context.Context, int64, int64, int64, *int64) (bool, error) { return true, nil },
 		countFn: func(context.Context, int64, []int64) (int64, error) { return 0, nil },
 	})
 
-	_, err := svc.Record(context.Background(), Actor{UserID: 1}, RecordInput{
+	_, err := svc.Record(context.Background(), Actor{UserID: 1, SchoolID: 1}, RecordInput{
 		SessionID:   1,
 		Attendances: []AttendanceInput{{StudentID: 1, Status: "hadir"}},
 	})
@@ -197,8 +208,8 @@ func TestRecordStoresAndReturnsRoster(t *testing.T) {
 	var stored []AttendanceInput
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		getFn:   func(context.Context, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
-		canFn:   func(context.Context, int64, int64, *int64) (bool, error) { return true, nil },
+		getFn:   func(context.Context, int64, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
+		canFn:   func(context.Context, int64, int64, int64, *int64) (bool, error) { return true, nil },
 		countFn: func(context.Context, int64, []int64) (int64, error) { return 1, nil },
 		recordFn: func(_ context.Context, _ int64, entries []AttendanceInput) error {
 			stored = entries
@@ -210,7 +221,7 @@ func TestRecordStoresAndReturnsRoster(t *testing.T) {
 		},
 	})
 
-	detail, err := svc.Record(context.Background(), Actor{UserID: 1}, RecordInput{
+	detail, err := svc.Record(context.Background(), Actor{UserID: 1, SchoolID: 1}, RecordInput{
 		SessionID:   1,
 		Attendances: []AttendanceInput{{StudentID: 1, Status: "hadir"}},
 	})
@@ -228,18 +239,18 @@ func TestRecordStoresAndReturnsRoster(t *testing.T) {
 func TestLockRequiresOwnership(t *testing.T) {
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		getFn:   func(context.Context, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
-		canFn:   func(context.Context, int64, int64, *int64) (bool, error) { return false, nil },
+		getFn:   func(context.Context, int64, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
+		canFn:   func(context.Context, int64, int64, int64, *int64) (bool, error) { return false, nil },
 	})
 
-	if _, err := svc.Lock(context.Background(), Actor{UserID: 1}, 1); !errors.Is(err, ErrForbidden) {
+	if _, err := svc.Lock(context.Background(), Actor{UserID: 1, SchoolID: 1}, 1); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("error = %v, want ErrForbidden", err)
 	}
 }
 
 func TestGetSessionReturnsRoster(t *testing.T) {
 	svc := NewService(&fakeRepository{
-		getFn: func(context.Context, int64) (Session, error) {
+		getFn: func(context.Context, int64, int64) (Session, error) {
 			return Session{ID: 1, ClassID: 2, Tanggal: Date(time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC))}, nil
 		},
 		listFn: func(context.Context, int64, int64) ([]Attendance, error) {
@@ -247,7 +258,7 @@ func TestGetSessionReturnsRoster(t *testing.T) {
 		},
 	})
 
-	detail, err := svc.GetSession(context.Background(), 1)
+	detail, err := svc.GetSession(context.Background(), 1, 1)
 	if err != nil {
 		t.Fatalf("GetSession() error = %v", err)
 	}
@@ -258,9 +269,9 @@ func TestGetSessionReturnsRoster(t *testing.T) {
 
 func TestGetSessionMapsNotFound(t *testing.T) {
 	svc := NewService(&fakeRepository{
-		getFn: func(context.Context, int64) (Session, error) { return Session{}, pgx.ErrNoRows },
+		getFn: func(context.Context, int64, int64) (Session, error) { return Session{}, pgx.ErrNoRows },
 	})
-	if _, err := svc.GetSession(context.Background(), 1); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.GetSession(context.Background(), 1, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
 	}
 }
@@ -268,19 +279,36 @@ func TestGetSessionMapsNotFound(t *testing.T) {
 func TestLockReturnsLockedSession(t *testing.T) {
 	svc := NewService(&fakeRepository{
 		staffFn: func(context.Context, int64) (int64, error) { return 5, nil },
-		getFn:   func(context.Context, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
-		canFn:   func(context.Context, int64, int64, *int64) (bool, error) { return true, nil },
+		getFn:   func(context.Context, int64, int64) (Session, error) { return Session{ID: 1, ClassID: 2}, nil },
+		canFn:   func(context.Context, int64, int64, int64, *int64) (bool, error) { return true, nil },
 		lockFn: func(context.Context, int64) (Session, error) {
 			return Session{ID: 1, ClassID: 2, IsLocked: true}, nil
 		},
 	})
 
-	locked, err := svc.Lock(context.Background(), Actor{UserID: 1}, 1)
+	locked, err := svc.Lock(context.Background(), Actor{UserID: 1, SchoolID: 1}, 1)
 	if err != nil {
 		t.Fatalf("Lock() error = %v", err)
 	}
 	if !locked.IsLocked {
 		t.Error("Lock() returned an unlocked session")
+	}
+}
+
+func TestListClassesReturnsRepositoryRows(t *testing.T) {
+	wali := "Ibu Sari"
+	svc := NewService(&fakeRepository{
+		classesFn: func(context.Context, int64) ([]Class, error) {
+			return []Class{{ID: 1, NamaKelas: "1A", Tingkat: 1, WaliKelas: &wali}}, nil
+		},
+	})
+
+	classes, err := svc.ListClasses(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("ListClasses() error = %v", err)
+	}
+	if len(classes) != 1 || classes[0].NamaKelas != "1A" || classes[0].WaliKelas == nil || *classes[0].WaliKelas != wali {
+		t.Errorf("classes = %+v, want one class 1A with wali Ibu Sari", classes)
 	}
 }
 

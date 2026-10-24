@@ -21,6 +21,9 @@ func (s *Service) CreateSession(ctx context.Context, actor Actor, in CreateSessi
 	if in.ClassID <= 0 {
 		return Session{}, ErrInvalidClass
 	}
+	if actor.SchoolID <= 0 {
+		return Session{}, ErrForbidden
+	}
 	if in.ClassSubjectID != nil && *in.ClassSubjectID <= 0 {
 		return Session{}, ErrInvalidSubject
 	}
@@ -33,8 +36,16 @@ func (s *Service) CreateSession(ctx context.Context, actor Actor, in CreateSessi
 	if err != nil {
 		return Session{}, err
 	}
-	if !actor.Manage {
-		allowed, err := s.repo.CanRecord(ctx, staffID, in.ClassID, in.ClassSubjectID)
+	if actor.Manage {
+		allowed, err := s.repo.ClassInSchool(ctx, in.ClassID, actor.SchoolID)
+		if err != nil {
+			return Session{}, fmt.Errorf("check class school: %w", err)
+		}
+		if !allowed {
+			return Session{}, ErrForbidden
+		}
+	} else {
+		allowed, err := s.repo.CanRecord(ctx, staffID, in.ClassID, actor.SchoolID, in.ClassSubjectID)
 		if err != nil {
 			return Session{}, fmt.Errorf("check class ownership: %w", err)
 		}
@@ -50,8 +61,8 @@ func (s *Service) CreateSession(ctx context.Context, actor Actor, in CreateSessi
 	return created, nil
 }
 
-func (s *Service) GetSession(ctx context.Context, id int64) (SessionDetail, error) {
-	session, err := s.repo.GetSession(ctx, id)
+func (s *Service) GetSession(ctx context.Context, schoolID, id int64) (SessionDetail, error) {
+	session, err := s.repo.GetSession(ctx, id, schoolID)
 	if err != nil {
 		if database.IsNotFound(err) {
 			return SessionDetail{}, ErrNotFound
@@ -71,7 +82,7 @@ func (s *Service) Record(ctx context.Context, actor Actor, in RecordInput) (Sess
 		return SessionDetail{}, err
 	}
 
-	session, err := s.repo.GetSession(ctx, in.SessionID)
+	session, err := s.repo.GetSession(ctx, in.SessionID, actor.SchoolID)
 	if err != nil {
 		if database.IsNotFound(err) {
 			return SessionDetail{}, ErrNotFound
@@ -109,7 +120,7 @@ func (s *Service) Record(ctx context.Context, actor Actor, in RecordInput) (Sess
 }
 
 func (s *Service) Lock(ctx context.Context, actor Actor, id int64) (Session, error) {
-	session, err := s.repo.GetSession(ctx, id)
+	session, err := s.repo.GetSession(ctx, id, actor.SchoolID)
 	if err != nil {
 		if database.IsNotFound(err) {
 			return Session{}, ErrNotFound
@@ -128,6 +139,16 @@ func (s *Service) Lock(ctx context.Context, actor Actor, id int64) (Session, err
 		return Session{}, fmt.Errorf("lock attendance session: %w", err)
 	}
 	return locked, nil
+}
+
+// ListClasses is read-only reference data for the attendance form, so it needs
+// no staff lookup: any authenticated caller may pick a class.
+func (s *Service) ListClasses(ctx context.Context, schoolID int64) ([]Class, error) {
+	classes, err := s.repo.ListClasses(ctx, schoolID)
+	if err != nil {
+		return nil, fmt.Errorf("list classes: %w", err)
+	}
+	return classes, nil
 }
 
 func (s *Service) staffID(ctx context.Context, actor Actor) (int64, error) {
@@ -149,7 +170,7 @@ func (s *Service) authorize(ctx context.Context, actor Actor, session Session) e
 	if err != nil {
 		return err
 	}
-	allowed, err := s.repo.CanRecord(ctx, staffID, session.ClassID, session.ClassSubjectID)
+	allowed, err := s.repo.CanRecord(ctx, staffID, session.ClassID, actor.SchoolID, session.ClassSubjectID)
 	if err != nil {
 		return fmt.Errorf("check class ownership: %w", err)
 	}

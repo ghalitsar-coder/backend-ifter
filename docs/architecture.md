@@ -9,7 +9,7 @@ cmd/api
         │     ├── middleware
         │     └── response
         ├── internal/attendance   (service + repository + domain types)
-        ├── internal/auth       (token service)
+        ├── internal/auth       (token, login and registration services)
         ├── internal/config
         └── internal/platform   (database, logger, metrics)
               └── internal/db   (sqlc-generated)
@@ -69,6 +69,30 @@ limited.
 - Constraints live in the database (primary keys, foreign keys, checks), not only
   in Go.
 
+## Multi-tenancy
+
+One deployment serves many schools. The boundary is `schools.id`:
+
+- `users` and `academic_years` carry `school_id`; every access token carries the
+  same value in its `school_id` claim.
+- The token is the only tenant source. Handlers read the claim and pass it into
+  the service, which passes it into the repository as a query parameter. No
+  handler accepts a school from the body or query string.
+- Attendance queries join through the active academic year, so a class, session,
+  or student from another school is indistinguishable from a missing row.
+- Registration inserts the school, admin user, staff row, and `admin` role in a
+  single statement. Duplicate NPSN or email fails the whole statement, leaving no
+  orphaned rows.
+
+A session belonging to another school returns `404`, because the scoped lookup
+finds nothing. Creating a session for a class outside the caller's school returns
+`403`: the class is visible only to its own school, so the permission check
+fails. A token without a school is rejected by the handlers.
+
+Tables that predate tenancy and have no module yet (`students`, `qr_sessions`)
+still carry global unique keys. Student reads are safe because they join through
+a school-scoped class, but scope those keys when the modules are built.
+
 ## Observability
 
 - JSON logs with `request_id`, method, path, status, duration, client IP.
@@ -98,7 +122,8 @@ normalization, validation, and `configs/config.example.yaml`.
 
 ## Deliberate omissions
 
-The skeleton does not include an ORM, a message queue, Redis, OpenAPI
-generation, or multi-tenancy. Add them when a real requirement appears, not in
-anticipation. The `shortcut:` marker in `ratelimit.go` records the one known
+The skeleton does not include an ORM, a message queue, Redis, or OpenAPI
+generation. Add them when a real requirement appears, not in anticipation.
+Tenancy stops at row scoping: there are no per-tenant schemas, connection pools,
+or database roles. The `shortcut:` marker in `ratelimit.go` records the one known
 limit that must be revisited when the service scales horizontally.

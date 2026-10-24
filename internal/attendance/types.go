@@ -39,6 +39,15 @@ func ParseDate(value string) (Date, error) {
 	return Date(parsed), nil
 }
 
+// Class is school reference data used to pick the class an attendance session
+// belongs to. WaliKelas is nil when the class has no homeroom teacher.
+type Class struct {
+	ID        int64   `json:"id"`
+	NamaKelas string  `json:"nama_kelas"`
+	Tingkat   int     `json:"tingkat"`
+	WaliKelas *string `json:"wali_kelas"`
+}
+
 type Session struct {
 	ID             int64     `json:"id"`
 	ClassID        int64     `json:"class_id"`
@@ -84,8 +93,9 @@ type AttendanceInput struct {
 // Actor is the authenticated caller. Manage is set for tu/admin, who may
 // record for any class.
 type Actor struct {
-	UserID int64
-	Manage bool
+	UserID   int64
+	SchoolID int64
+	Manage   bool
 }
 
 func validStatus(status string) bool {

@@ -28,6 +28,16 @@ func IsNotNullViolation(err error) bool {
 	return hasCode(err, "23502")
 }
 
+// ConstraintName returns the violated database constraint, when the error is a
+// PostgreSQL error that carries one.
+func ConstraintName(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.ConstraintName
+	}
+	return ""
+}
+
 func hasCode(err error, code string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == code

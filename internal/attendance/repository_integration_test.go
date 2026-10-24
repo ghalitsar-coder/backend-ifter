@@ -36,6 +36,19 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	}
 
 	repo := NewPostgresRepository(pool)
+
+	classes, err := repo.ListClasses(ctx, 1)
+	if err != nil || len(classes) == 0 || classes[0].NamaKelas != "1A" {
+		t.Fatalf("ListClasses() = %+v, %v; want the seeded class 1A first", classes, err)
+	}
+
+	if outside, err := repo.ListClasses(ctx, 999); err != nil || len(outside) != 0 {
+		t.Fatalf("ListClasses(school 999) = %+v, %v; want empty, nil", outside, err)
+	}
+	if in, err := repo.ClassInSchool(ctx, 1, 999); err != nil || in {
+		t.Fatalf("ClassInSchool(school 999) = %v, %v; want false, nil", in, err)
+	}
+
 	tanggal := time.Date(2099, 12, 31, 0, 0, 0, 0, time.UTC)
 	_, _ = pool.Exec(ctx, "DELETE FROM attendance_sessions WHERE class_id = 1 AND tanggal = $1", tanggal)
 
@@ -43,8 +56,11 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StaffIDByUserID() error = %v", err)
 	}
-	if allowed, err := repo.CanRecord(ctx, staffID, 1, nil); err != nil || !allowed {
+	if allowed, err := repo.CanRecord(ctx, staffID, 1, 1, nil); err != nil || !allowed {
 		t.Fatalf("CanRecord() = %v, %v; want true, nil", allowed, err)
+	}
+	if allowed, err := repo.CanRecord(ctx, staffID, 1, 999, nil); err != nil || allowed {
+		t.Fatalf("CanRecord(school 999) = %v, %v; want false, nil", allowed, err)
 	}
 
 	session, err := repo.CreateSession(ctx, 1, staffID, nil, tanggal)

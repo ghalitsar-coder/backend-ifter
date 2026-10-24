@@ -43,6 +43,9 @@ func Run(ctx context.Context) error {
 
 	attendanceService := attendance.NewService(attendance.NewPostgresRepository(pool))
 	tokens := auth.NewTokenService(cfg.Auth)
+	authRepo := auth.NewPostgresRepository(pool)
+	loginService := auth.NewLoginService(authRepo, tokens, cfg.Auth.AccessTokenTTL)
+	registerService := auth.NewRegisterService(authRepo, tokens, cfg.Auth.AccessTokenTTL)
 
 	handler := httptransport.New(httptransport.Deps{
 		Config:     cfg,
@@ -50,6 +53,8 @@ func Run(ctx context.Context) error {
 		Metrics:    m,
 		Readiness:  pool,
 		Tokens:     tokens,
+		Auth:       loginService,
+		Register:   registerService,
 		Attendance: attendanceService,
 		Version:    Version,
 	})

@@ -3,10 +3,12 @@
 -- Apply with: docker compose exec -T postgres psql -U app -d app < db/seed/demo.sql
 -- Safe to re-run.
 
-INSERT INTO users (id, username, password_hash) OVERRIDING SYSTEM VALUE VALUES
-    (1, 'guru1', '!'),
-    (2, 'tu1',   '!')
-ON CONFLICT (id) DO NOTHING;
+-- Demo-only data: both accounts log in with the password "guru123". Never use
+-- this hash outside a local database.
+INSERT INTO users (id, school_id, username, password_hash) OVERRIDING SYSTEM VALUE VALUES
+    (1, 1, 'guru1', '$2a$10$90sFxvRpAdKLNBpBGzGVB.Oit7/VRY/ooWrKiL2OlwrBxpCPvb0y2'),
+    (2, 1, 'tu1',   '$2a$10$90sFxvRpAdKLNBpBGzGVB.Oit7/VRY/ooWrKiL2OlwrBxpCPvb0y2')
+ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash, school_id = EXCLUDED.school_id;
 
 INSERT INTO user_roles (user_id, role_id) VALUES
     (1, (SELECT id FROM roles WHERE kode = 'guru')),
@@ -18,8 +20,8 @@ INSERT INTO staff (id, user_id, nip, nama, jabatan) OVERRIDING SYSTEM VALUE VALU
     (2, 2, '19800202', 'Bapak Andi', 'Tata Usaha')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO academic_years (id, nama, semester, tgl_mulai, tgl_selesai, is_active) OVERRIDING SYSTEM VALUE VALUES
-    (1, '2026/2027', 'ganjil', DATE '2026-07-01', DATE '2026-12-31', TRUE)
+INSERT INTO academic_years (id, school_id, nama, semester, tgl_mulai, tgl_selesai, is_active) OVERRIDING SYSTEM VALUE VALUES
+    (1, 1, '2026/2027', 'ganjil', DATE '2026-07-01', DATE '2026-12-31', TRUE)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO classes (id, academic_year_id, wali_kelas_id, nama_kelas, tingkat) OVERRIDING SYSTEM VALUE VALUES

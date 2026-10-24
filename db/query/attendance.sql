@@ -9,7 +9,9 @@ WHERE user_id = sqlc.arg(user_id)::bigint AND is_active;
 SELECT EXISTS (
     SELECT 1
     FROM classes c
+    JOIN academic_years ay ON ay.id = c.academic_year_id
     WHERE c.id = sqlc.arg(class_id)
+      AND ay.school_id = sqlc.arg(school_id)
       AND (
           (sqlc.narg(class_subject_id)::bigint IS NOT NULL AND EXISTS (
               SELECT 1
@@ -47,9 +49,19 @@ WHERE s.class_id = sqlc.arg(class_id)
 LIMIT 1;
 
 -- name: GetAttendanceSession :one
-SELECT id, class_id, class_subject_id, recorded_by, tanggal, is_locked, created_at
-FROM attendance_sessions
-WHERE id = sqlc.arg(id);
+SELECT s.id, s.class_id, s.class_subject_id, s.recorded_by, s.tanggal, s.is_locked, s.created_at
+FROM attendance_sessions s
+JOIN classes c ON c.id = s.class_id
+JOIN academic_years ay ON ay.id = c.academic_year_id
+WHERE s.id = sqlc.arg(id) AND ay.school_id = sqlc.arg(school_id);
+
+-- name: ClassInSchool :one
+SELECT EXISTS (
+    SELECT 1
+    FROM classes c
+    JOIN academic_years ay ON ay.id = c.academic_year_id
+    WHERE c.id = sqlc.arg(class_id) AND ay.school_id = sqlc.arg(school_id)
+);
 
 -- name: GetAttendanceSessionLockState :one
 SELECT is_locked
@@ -87,3 +99,13 @@ INSERT INTO student_attendances (session_id, student_id, status, keterangan)
 VALUES (sqlc.arg(session_id), sqlc.arg(student_id), sqlc.arg(status), sqlc.narg(keterangan))
 ON CONFLICT (session_id, student_id)
 DO UPDATE SET status = EXCLUDED.status, keterangan = EXCLUDED.keterangan;
+
+-- Class picker data for the attendance form: only classes of the active
+-- academic period.
+-- name: ListActiveClasses :many
+SELECT c.id, c.nama_kelas, c.tingkat, s.nama AS wali_kelas
+FROM classes c
+JOIN academic_years ay ON ay.id = c.academic_year_id
+LEFT JOIN staff s ON s.id = c.wali_kelas_id
+WHERE ay.is_active AND c.is_active AND ay.school_id = sqlc.arg(school_id)
+ORDER BY c.tingkat, c.nama_kelas;

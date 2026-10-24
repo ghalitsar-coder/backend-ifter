@@ -14,22 +14,24 @@ const canRecordAttendance = `-- name: CanRecordAttendance :one
 SELECT EXISTS (
     SELECT 1
     FROM classes c
+    JOIN academic_years ay ON ay.id = c.academic_year_id
     WHERE c.id = $1
+      AND ay.school_id = $2
       AND (
-          ($2::bigint IS NOT NULL AND EXISTS (
+          ($3::bigint IS NOT NULL AND EXISTS (
               SELECT 1
               FROM class_subjects cs
-              WHERE cs.id = $2
+              WHERE cs.id = $3
                 AND cs.class_id = c.id
-                AND cs.teacher_id = $3
+                AND cs.teacher_id = $4
           ))
           OR
-          ($2::bigint IS NULL AND (
-              c.wali_kelas_id = $3
+          ($3::bigint IS NULL AND (
+              c.wali_kelas_id = $4
               OR EXISTS (
                   SELECT 1
                   FROM class_subjects cs2
-                  WHERE cs2.class_id = c.id AND cs2.teacher_id = $3
+                  WHERE cs2.class_id = c.id AND cs2.teacher_id = $4
               )
           ))
       )
@@ -38,6 +40,7 @@ SELECT EXISTS (
 
 type CanRecordAttendanceParams struct {
 	ClassID        int64  `json:"class_id"`
+	SchoolID       int64  `json:"school_id"`
 	ClassSubjectID *int64 `json:"class_subject_id"`
 	StaffID        int64  `json:"staff_id"`
 }
@@ -45,7 +48,33 @@ type CanRecordAttendanceParams struct {
 // A guru may record for a class they teach (or are wali kelas of); a specific
 // subject session must belong to them.
 func (q *Queries) CanRecordAttendance(ctx context.Context, arg CanRecordAttendanceParams) (bool, error) {
-	row := q.db.QueryRow(ctx, canRecordAttendance, arg.ClassID, arg.ClassSubjectID, arg.StaffID)
+	row := q.db.QueryRow(ctx, canRecordAttendance,
+		arg.ClassID,
+		arg.SchoolID,
+		arg.ClassSubjectID,
+		arg.StaffID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const classInSchool = `-- name: ClassInSchool :one
+SELECT EXISTS (
+    SELECT 1
+    FROM classes c
+    JOIN academic_years ay ON ay.id = c.academic_year_id
+    WHERE c.id = $1 AND ay.school_id = $2
+)
+`
+
+type ClassInSchoolParams struct {
+	ClassID  int64 `json:"class_id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+func (q *Queries) ClassInSchool(ctx context.Context, arg ClassInSchoolParams) (bool, error) {
+	row := q.db.QueryRow(ctx, classInSchool, arg.ClassID, arg.SchoolID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -126,13 +155,20 @@ func (q *Queries) CreateAttendanceSession(ctx context.Context, arg CreateAttenda
 }
 
 const getAttendanceSession = `-- name: GetAttendanceSession :one
-SELECT id, class_id, class_subject_id, recorded_by, tanggal, is_locked, created_at
-FROM attendance_sessions
-WHERE id = $1
+SELECT s.id, s.class_id, s.class_subject_id, s.recorded_by, s.tanggal, s.is_locked, s.created_at
+FROM attendance_sessions s
+JOIN classes c ON c.id = s.class_id
+JOIN academic_years ay ON ay.id = c.academic_year_id
+WHERE s.id = $1 AND ay.school_id = $2
 `
 
-func (q *Queries) GetAttendanceSession(ctx context.Context, id int64) (AttendanceSession, error) {
-	row := q.db.QueryRow(ctx, getAttendanceSession, id)
+type GetAttendanceSessionParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+func (q *Queries) GetAttendanceSession(ctx context.Context, arg GetAttendanceSessionParams) (AttendanceSession, error) {
+	row := q.db.QueryRow(ctx, getAttendanceSession, arg.ID, arg.SchoolID)
 	var i AttendanceSession
 	err := row.Scan(
 		&i.ID,
@@ -158,6 +194,49 @@ func (q *Queries) GetAttendanceSessionLockState(ctx context.Context, id int64) (
 	var is_locked bool
 	err := row.Scan(&is_locked)
 	return is_locked, err
+}
+
+const listActiveClasses = `-- name: ListActiveClasses :many
+SELECT c.id, c.nama_kelas, c.tingkat, s.nama AS wali_kelas
+FROM classes c
+JOIN academic_years ay ON ay.id = c.academic_year_id
+LEFT JOIN staff s ON s.id = c.wali_kelas_id
+WHERE ay.is_active AND c.is_active AND ay.school_id = $1
+ORDER BY c.tingkat, c.nama_kelas
+`
+
+type ListActiveClassesRow struct {
+	ID        int64   `json:"id"`
+	NamaKelas string  `json:"nama_kelas"`
+	Tingkat   int16   `json:"tingkat"`
+	WaliKelas *string `json:"wali_kelas"`
+}
+
+// Class picker data for the attendance form: only classes of the active
+// academic period.
+func (q *Queries) ListActiveClasses(ctx context.Context, schoolID int64) ([]ListActiveClassesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveClasses, schoolID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveClassesRow{}
+	for rows.Next() {
+		var i ListActiveClassesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.NamaKelas,
+			&i.Tingkat,
+			&i.WaliKelas,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSessionAttendances = `-- name: ListSessionAttendances :many

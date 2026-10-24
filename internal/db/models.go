@@ -18,6 +18,7 @@ type AcademicYear struct {
 	TglSelesai time.Time `json:"tgl_selesai"`
 	IsActive   bool      `json:"is_active"`
 	CreatedAt  time.Time `json:"created_at"`
+	SchoolID   int64     `json:"school_id"`
 }
 
 type AttendanceSession struct {
@@ -95,6 +96,14 @@ type Role struct {
 	Kode      string    `json:"kode"`
 	Nama      string    `json:"nama"`
 	Deskripsi *string   `json:"deskripsi"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type School struct {
+	ID        int64     `json:"id"`
+	Npsn      string    `json:"npsn"`
+	Nama      string    `json:"nama"`
+	Jenjang   string    `json:"jenjang"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -202,6 +211,7 @@ type User struct {
 	PasswordHash string    `json:"password_hash"`
 	IsActive     bool      `json:"is_active"`
 	CreatedAt    time.Time `json:"created_at"`
+	SchoolID     int64     `json:"school_id"`
 }
 
 type UserRole struct {
