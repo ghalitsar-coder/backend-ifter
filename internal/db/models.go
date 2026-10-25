@@ -105,6 +105,19 @@ type ClassEnrollment struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Device struct {
+	ID         pgtype.UUID        `json:"id"`
+	Name       string             `json:"name"`
+	Identifier string             `json:"identifier"`
+	DeviceType string             `json:"device_type"`
+	Location   pgtype.Text        `json:"location"`
+	Notes      pgtype.Text        `json:"notes"`
+	Status     string             `json:"status"`
+	LastSeenAt pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DisciplineCategory struct {
 	ID                     pgtype.UUID        `json:"id"`
 	Code                   pgtype.Text        `json:"code"`
@@ -230,6 +243,17 @@ type ImportRowError struct {
 	ColumnName  pgtype.Text `json:"column_name"`
 	ErrorCode   string      `json:"error_code"`
 	Message     string      `json:"message"`
+}
+
+type PushSubscription struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Endpoint  string             `json:"endpoint"`
+	P256dh    string             `json:"p256dh"`
+	Auth      string             `json:"auth"`
+	UserAgent pgtype.Text        `json:"user_agent"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type RefreshToken struct {

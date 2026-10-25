@@ -2,6 +2,7 @@ package httptransport
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -10,13 +11,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ghalitsar-coder/backend-ifter/internal/discipline"
+	notificationspkg "github.com/ghalitsar-coder/backend-ifter/internal/notifications"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/response"
 )
 
 type disciplineHandler struct {
-	service *discipline.Service
-	log     *slog.Logger
+	service       *discipline.Service
+	log           *slog.Logger
+	notifications *notificationspkg.Service
 }
 
 type disciplineCategoryRequest struct {
@@ -48,8 +51,8 @@ type disciplinePointsRequest struct {
 	Reason string `json:"reason" binding:"required"`
 }
 
-func newDisciplineHandler(service *discipline.Service, log *slog.Logger) *disciplineHandler {
-	return &disciplineHandler{service: service, log: log}
+func newDisciplineHandler(service *discipline.Service, log *slog.Logger, notifications *notificationspkg.Service) *disciplineHandler {
+	return &disciplineHandler{service: service, log: log, notifications: notifications}
 }
 
 func (h *disciplineHandler) actor(c *gin.Context) (discipline.Actor, bool) {
@@ -211,7 +214,23 @@ func (h *disciplineHandler) CreateRecord(c *gin.Context) {
 		h.writeError(c, err)
 		return
 	}
+	h.notifyNewRecord(c, result)
 	response.JSON(c, http.StatusCreated, result)
+}
+
+// notifyNewRecord pushes a short summary to admin/principal subscribers
+// (F9). Best effort: push failures are logged and never affect the write.
+func (h *disciplineHandler) notifyNewRecord(c *gin.Context, record discipline.RecordDetail) {
+	if h.notifications == nil {
+		return
+	}
+	if _, err := h.notifications.NotifyRoles(c.Request.Context(), []string{"admin", "principal"}, notificationspkg.Payload{
+		Title: "Pelanggaran baru",
+		Body:  fmt.Sprintf("%s — %s (%d poin)", record.StudentName, record.CategoryName, record.Points),
+		URL:   "/dashboard/kedisiplinan",
+	}); err != nil {
+		h.log.Warn("discipline_push_notify_failed", "request_id", response.RequestID(c), "error", err)
+	}
 }
 
 func (h *disciplineHandler) GetRecord(c *gin.Context) {

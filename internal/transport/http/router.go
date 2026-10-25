@@ -12,12 +12,14 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
 	correctionevidencepkg "github.com/ghalitsar-coder/backend-ifter/internal/correctionevidence"
+	devicespkg "github.com/ghalitsar-coder/backend-ifter/internal/devices"
 	disciplinepkg "github.com/ghalitsar-coder/backend-ifter/internal/discipline"
 	dispensationspkg "github.com/ghalitsar-coder/backend-ifter/internal/dispensations"
 	dutyrotationpkg "github.com/ghalitsar-coder/backend-ifter/internal/dutyrotation"
 	employmenttypepkg "github.com/ghalitsar-coder/backend-ifter/internal/employmenttype"
 	importservice "github.com/ghalitsar-coder/backend-ifter/internal/imports"
 	"github.com/ghalitsar-coder/backend-ifter/internal/masterdata"
+	notificationspkg "github.com/ghalitsar-coder/backend-ifter/internal/notifications"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
 	reporting "github.com/ghalitsar-coder/backend-ifter/internal/reporting"
 	sanctionrulespkg "github.com/ghalitsar-coder/backend-ifter/internal/sanctionrules"
@@ -114,6 +116,8 @@ type FeatureDeps struct {
 	EmploymentType     *employmenttypepkg.Service
 	CorrectionEvidence *correctionevidencepkg.Service
 	StudentAccounts    *studentaccountspkg.Service
+	Devices            *devicespkg.Service
+	Notifications      *notificationspkg.Service
 }
 
 // roleGroup derives a RequireRoles-guarded sub-group from an authenticated parent.
@@ -202,6 +206,14 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 			My:                roleGroup(authenticated, rolesStudent...),
 		}
 
+		// Web-push is built before the discipline handler so a new violation
+		// can notify admin/principal subscribers (F9). The remaining
+		// FeatureDeps fields are assembled once the API pool is known below.
+		deps := FeatureDeps{Log: log}
+		if pool, ok := readiness.(*pgxpool.Pool); ok {
+			deps.Notifications = notificationspkg.NewService(pool, log, notificationspkg.ConfigFromEnvironment())
+		}
+
 		// User management is admin-only (staff_tu is explicitly excluded).
 		groups.Admin.GET("/users", handler.ListUsers)
 		groups.Admin.POST("/users", middleware.BodyLimit(64<<10), handler.CreateUser)
@@ -255,7 +267,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 		}
 
 		if disciplineService != nil {
-			disciplineHandler := newDisciplineHandler(disciplineService, log)
+			disciplineHandler := newDisciplineHandler(disciplineService, log, deps.Notifications)
 			// Discipline operations: admin + teacher + duty_teacher (not principal).
 			groups.DisciplineOps.POST("/discipline/records", middleware.BodyLimit(64<<10), disciplineHandler.CreateRecord)
 			groups.DisciplineOps.POST("/discipline/records/:id/followups", middleware.BodyLimit(64<<10), disciplineHandler.AddFollowup)
@@ -324,7 +336,6 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 		// Beyond-MVP feature scaffolds. Each Register* is a no-op today; the
 		// owning feature agent fills its own file and domain package against the
 		// contract in docs/API_ADDENDUM.md. Attach endpoints to the groups above.
-		deps := FeatureDeps{Log: log}
 		if pool, ok := readiness.(*pgxpool.Pool); ok {
 			deps.TeacherPresence = teacherpresencepkg.NewService(pool, log)
 			// Dispensations, correction evidence and student accounts share the
@@ -345,6 +356,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 			deps.EmploymentType = employmenttypepkg.NewService(pool, log)
 			deps.CorrectionEvidence = correctionevidencepkg.NewService(pool, log, correctionCfg)
 			deps.StudentAccounts = studentaccountspkg.NewService(pool, authAccountProvisioner{service: authService}, log)
+			deps.Devices = devicespkg.NewService(pool, log)
 		}
 		RegisterTeacherPresence(v1, groups, deps)
 		RegisterDispensations(v1, groups, deps)
@@ -353,6 +365,8 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 		RegisterEmploymentType(v1, groups, deps)
 		RegisterCorrectionEvidence(v1, groups, deps)
 		RegisterStudentAccounts(v1, groups, deps)
+		RegisterDevices(v1, groups, deps)
+		RegisterNotifications(v1, groups, deps)
 	}
 
 	return r
