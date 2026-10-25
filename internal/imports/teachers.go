@@ -27,6 +27,7 @@ type teacherInput struct {
 	Email          string
 	Phone          string
 	Status         string
+	EmploymentType string
 }
 
 type teacherImportRow struct {
@@ -65,6 +66,14 @@ func parseTeacherWorkbook(data []byte, maxRows int) ([]teacherInput, *RowError) 
 		return nil, &RowError{RowNumber: 1, Column: missing, Code: "missing_header", Message: "kolom wajib tidak ditemukan pada header"}
 	}
 
+	// "Jenis Kepegawaian" is an optional column (employment-type package): the
+	// workbook stays valid without it; a present-but-unknown value is a row
+	// warning, not a hard error (package spec).
+	employmentColumn := optionalColumn(rows[0], "Jenis Kepegawaian")
+	if employmentColumn >= 0 {
+		columns["employment_type"] = employmentColumn
+	}
+
 	inputs := make([]teacherInput, 0, len(rows)-1)
 	for index := 1; index < len(rows); index++ {
 		row := rows[index]
@@ -78,6 +87,7 @@ func parseTeacherWorkbook(data []byte, maxRows int) ([]teacherInput, *RowError) 
 			Email:          cell(row, columns, "email"),
 			Phone:          cell(row, columns, "phone"),
 			Status:         cell(row, columns, "status"),
+			EmploymentType: cell(row, columns, "employment_type"),
 		})
 	}
 	if len(inputs) == 0 {
@@ -131,6 +141,35 @@ func (s *Service) validateTeachers(ctx context.Context, q *db.Queries, mode Mode
 			result.Errors = append(result.Errors, rowErrors...)
 			result.Rows = append(result.Rows, preview(input.Row, "invalid", employeeNumber, fullName, "", nil))
 			continue
+		}
+
+		// Optional "Jenis Kepegawaian" column (employment-type package): a
+		// known value resolves to an employment_types seed row; an unknown
+		// value is a row warning and the teacher imports without an
+		// employment type (package spec: not a hard error).
+		var employmentID pgtype.UUID
+		employmentCode, employmentKnown := normalizeEmploymentType(input.EmploymentType)
+		if !employmentKnown {
+			result.Errors = append(result.Errors, RowError{
+				RowNumber: input.Row,
+				Column:    "Jenis Kepegawaian",
+				Code:      "warning",
+				Message:   "jenis kepegawaian tidak dikenal; gunakan Permanent, Honorer, atau Staf TU; baris tetap diimpor tanpa jenis kepegawaian",
+			})
+		} else if employmentCode != "" {
+			employmentType, err := q.GetEmploymentTypeByCode(ctx, employmentCode)
+			if err == nil {
+				employmentID = employmentType.ID
+			} else if !database.IsNotFound(err) {
+				return Validation{}, err
+			} else {
+				result.Errors = append(result.Errors, RowError{
+					RowNumber: input.Row,
+					Column:    "Jenis Kepegawaian",
+					Code:      "warning",
+					Message:   "jenis kepegawaian belum terdaftar sebagai master data; baris tetap diimpor tanpa jenis kepegawaian",
+				})
+			}
 		}
 
 		if first, exists := seen[employeeNumber]; exists {
@@ -193,11 +232,12 @@ func (s *Service) validateTeachers(ctx context.Context, q *db.Queries, mode Mode
 				EmployeeNumber: employeeNumber,
 				FullName:       fullName,
 				Create: db.CreateTeacherParams{
-					EmployeeNumber: optionalText(employeeNumber),
-					FullName:       fullName,
-					Email:          optionalText(email),
-					Phone:          optionalText(phone),
-					Status:         targetStatus,
+					EmployeeNumber:   optionalText(employeeNumber),
+					FullName:         fullName,
+					Email:            optionalText(email),
+					Phone:            optionalText(phone),
+					Status:           targetStatus,
+					EmploymentTypeID: employmentID,
 				},
 			})
 			result.Rows = append(result.Rows, preview(input.Row, "create", employeeNumber, fullName, "", nil))
@@ -216,7 +256,11 @@ func (s *Service) validateTeachers(ctx context.Context, q *db.Queries, mode Mode
 		if phone != "" {
 			mergedPhone = optionalText(phone)
 		}
-		changed := make([]string, 0, 4)
+		mergedEmploymentTypeID := existingTeacher.EmploymentTypeID
+		if employmentID.Valid {
+			mergedEmploymentTypeID = employmentID
+		}
+		changed := make([]string, 0, 5)
 		if mergedName != existingTeacher.FullName {
 			changed = append(changed, "name")
 		}
@@ -225,6 +269,9 @@ func (s *Service) validateTeachers(ctx context.Context, q *db.Queries, mode Mode
 		}
 		if !sameText(mergedPhone, existingTeacher.Phone) {
 			changed = append(changed, "phone")
+		}
+		if !sameUUID(mergedEmploymentTypeID, existingTeacher.EmploymentTypeID) {
+			changed = append(changed, "employment_type")
 		}
 		statusUpdate := status != "" && status != existingTeacher.Status
 		if statusUpdate {
@@ -244,12 +291,13 @@ func (s *Service) validateTeachers(ctx context.Context, q *db.Queries, mode Mode
 			ExistingID:     existingTeacher.ID,
 			Expected:       existingTeacher,
 			Update: db.UpdateTeacherParams{
-				UserID:         existingTeacher.UserID,
-				EmployeeNumber: optionalText(employeeNumber),
-				FullName:       mergedName,
-				Email:          mergedEmail,
-				Phone:          mergedPhone,
-				ID:             existingTeacher.ID,
+				UserID:           existingTeacher.UserID,
+				EmployeeNumber:   optionalText(employeeNumber),
+				FullName:         mergedName,
+				Email:            mergedEmail,
+				Phone:            mergedPhone,
+				EmploymentTypeID: mergedEmploymentTypeID,
+				ID:               existingTeacher.ID,
 			},
 			TargetStatus: targetStatus,
 			StatusUpdate: statusUpdate,
@@ -265,6 +313,7 @@ func sameTeacherSnapshot(current, expected db.Teacher) bool {
 		current.FullName == expected.FullName &&
 		sameText(current.Email, expected.Email) &&
 		sameText(current.Phone, expected.Phone) &&
+		sameUUID(current.EmploymentTypeID, expected.EmploymentTypeID) &&
 		current.Status == expected.Status
 }
 

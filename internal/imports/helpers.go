@@ -169,6 +169,38 @@ func normalizeTeacherStatus(value string) (string, error) {
 	}
 }
 
+// normalizeEmploymentType maps the optional teacher-import "Jenis Kepegawaian"
+// cell onto an employment_types.code (employment-type package, migration
+// 000013). The second result reports whether the value was recognized: an
+// unknown value is a row warning, not a hard error (package spec), so the
+// caller imports the row without an employment type.
+func normalizeEmploymentType(value string) (code string, known bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return "", true
+	case "permanent", "permanen":
+		return "permanent", true
+	case "honorer", "honorary":
+		return "honorary", true
+	case "staf tu", "staff tu", "staf_tu", "staff_tu":
+		return "staff_tu", true
+	default:
+		return "", false
+	}
+}
+
+// optionalColumn finds a case-insensitive header alias in the workbook header
+// row, returning -1 when the (optional) column is absent.
+func optionalColumn(header []string, alias string) int {
+	target := strings.ToLower(strings.TrimSpace(alias))
+	for index, value := range header {
+		if strings.ToLower(strings.TrimSpace(value)) == target {
+			return index
+		}
+	}
+	return -1
+}
+
 func resolveDate(value string, start, end pgtype.Date) (pgtype.Date, error) {
 	var chosen time.Time
 	if strings.TrimSpace(value) == "" {

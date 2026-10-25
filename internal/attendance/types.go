@@ -186,6 +186,10 @@ type Correction struct {
 	Reason        string     `json:"reason"`
 	CorrectedByID string     `json:"corrected_by_user_id"`
 	CorrectedAt   time.Time  `json:"corrected_at"`
+	// EvidenceHash is the server-computed canonical sha256 over the
+	// correction payload (correction-evidence package). Null for rows
+	// created before migration 000014.
+	EvidenceHash *string `json:"evidence_hash,omitempty"`
 }
 
 type RecordDetail struct {

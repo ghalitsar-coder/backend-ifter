@@ -64,6 +64,15 @@ func textString(value pgtype.Text) string {
 	return value.String
 }
 
+// textPtr exposes a nullable text column as a JSON-nullable string.
+func textPtr(value pgtype.Text) *string {
+	if !value.Valid {
+		return nil
+	}
+	text := value.String
+	return &text
+}
+
 func timestamp(value pgtype.Timestamptz) time.Time {
 	if !value.Valid {
 		return time.Time{}
@@ -492,6 +501,7 @@ func correctionFromRow(row db.AttendanceCorrection) Correction {
 		Reason:        row.Reason,
 		CorrectedByID: uuidString(row.CorrectedByUserID),
 		CorrectedAt:   timestamp(row.CorrectedAt),
+		EvidenceHash:  textPtr(row.EvidenceHash),
 	}
 }
 

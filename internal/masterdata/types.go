@@ -98,32 +98,36 @@ type HomeroomInput struct {
 }
 
 type Teacher struct {
-	ID             string    `json:"id"`
-	UserID         string    `json:"user_id,omitempty"`
-	EmployeeNumber string    `json:"employee_number,omitempty"`
-	FullName       string    `json:"full_name"`
-	Email          string    `json:"email,omitempty"`
-	Phone          string    `json:"phone,omitempty"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	UserID             string    `json:"user_id,omitempty"`
+	EmployeeNumber     string    `json:"employee_number,omitempty"`
+	FullName           string    `json:"full_name"`
+	Email              string    `json:"email,omitempty"`
+	Phone              string    `json:"phone,omitempty"`
+	Status             string    `json:"status"`
+	EmploymentTypeID   string    `json:"employment_type_id,omitempty"`
+	EmploymentTypeName string    `json:"employment_type_name,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type TeacherInput struct {
-	EmployeeNumber string
-	FullName       string
-	Email          string
-	Phone          string
-	UserID         string
-	Status         string
+	EmployeeNumber   string
+	FullName         string
+	Email            string
+	Phone            string
+	UserID           string
+	Status           string
+	EmploymentTypeID string
 }
 
 type TeacherUpdateInput struct {
-	EmployeeNumber string
-	FullName       string
-	Email          string
-	Phone          string
-	UserID         string
+	EmployeeNumber   string
+	FullName         string
+	Email            string
+	Phone            string
+	UserID           string
+	EmploymentTypeID string
 }
 
 type TeacherFilter struct {

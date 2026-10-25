@@ -59,7 +59,7 @@ type uploadBody struct {
 
 var (
 	studentHeaders = []string{"NIS", "NISN", "Nama Lengkap", "Jenis Kelamin", "Tanggal Lahir", "Tahun Masuk", "Status", "Nama Wali", "Telepon Wali", "Tahun Ajaran", "Kelas", "Tanggal Mulai Kelas"}
-	teacherHeaders = []string{"NIP", "Nama Lengkap", "Email", "Telepon", "Status"}
+	teacherHeaders = []string{"NIP", "Nama Lengkap", "Email", "Telepon", "Status", "Jenis Kepegawaian"}
 )
 
 func TestImportExportAPI(t *testing.T) {

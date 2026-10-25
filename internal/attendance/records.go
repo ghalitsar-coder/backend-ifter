@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ghalitsar-coder/backend-ifter/internal/correctionevidence"
 	"github.com/ghalitsar-coder/backend-ifter/internal/db"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/database"
 )
@@ -425,6 +426,20 @@ func (s *Service) Correct(ctx context.Context, actor Actor, recordIDValue string
 		if newStatus != "present" && newStatus != "late" && newCheckIn.Valid {
 			return ErrInvalidInput
 		}
+		// The server is the source of truth for the integrity hash
+		// (correction-evidence package spec): canonical sha256 over the
+		// correction payload. corrected_at comes from the transaction's
+		// now() so the append/closed-day triggers keep matching it while the
+		// hash and the stored row cover the exact same instant.
+		correctedAtValue, err := q.TransactionNow(ctx)
+		if err != nil {
+			return fmt.Errorf("read transaction timestamp for correction hash: %w", err)
+		}
+		correctedAt := correctedAtValue.Time.UTC()
+		evidenceHash := correctionevidence.HashCorrectionFields(
+			record.Status, newStatus, newCheckIn, newNotes,
+			reason, uuidString(actorID), correctedAt,
+		)
 		if _, err := q.CreateAttendanceCorrection(ctx, db.CreateAttendanceCorrectionParams{
 			AttendanceRecordID: record.ID,
 			OldStatus:          record.Status,
@@ -435,6 +450,8 @@ func (s *Service) Correct(ctx context.Context, actor Actor, recordIDValue string
 			NewNotes:           newNotes,
 			Reason:             reason,
 			CorrectedByUserID:  actorID,
+			EvidenceHash:       pgtype.Text{String: evidenceHash, Valid: true},
+			CorrectedAt:        correctedAtValue,
 		}); err != nil {
 			return mapWriteError(fmt.Errorf("create attendance correction: %w", err))
 		}

@@ -371,6 +371,15 @@ func (s *Service) StudentSummary(ctx context.Context, actor Actor, studentIDValu
 		summary.Categories[position].Count++
 		summary.Categories[position].Points += record.Points
 	}
+	// current_level: the sanction rule (sanction-rules package, migration
+	// 000012) whose active point range covers the accumulated total. Null
+	// when no rule matches.
+	match, err := s.queries.MatchSanctionRuleForPoints(ctx, summary.TotalPoints)
+	if err == nil {
+		summary.CurrentLevel = &SanctionLevel{Level: textPtr(match.Level), Action: match.Action}
+	} else if !database.IsNotFound(err) {
+		return StudentSummary{}, fmt.Errorf("match sanction rule for points: %w", err)
+	}
 	return summary, nil
 }
 

@@ -56,20 +56,22 @@ type homeroomRequest struct {
 }
 
 type teacherRequest struct {
-	EmployeeNumber string `json:"employee_number"`
-	FullName       string `json:"full_name" binding:"required"`
-	Email          string `json:"email"`
-	Phone          string `json:"phone"`
-	UserID         string `json:"user_id"`
-	Status         string `json:"status"`
+	EmployeeNumber   string `json:"employee_number"`
+	FullName         string `json:"full_name" binding:"required"`
+	Email            string `json:"email"`
+	Phone            string `json:"phone"`
+	UserID           string `json:"user_id"`
+	Status           string `json:"status"`
+	EmploymentTypeID string `json:"employment_type_id"`
 }
 
 type teacherUpdateRequest struct {
-	EmployeeNumber string `json:"employee_number"`
-	FullName       string `json:"full_name" binding:"required"`
-	Email          string `json:"email"`
-	Phone          string `json:"phone"`
-	UserID         string `json:"user_id"`
+	EmployeeNumber   string `json:"employee_number"`
+	FullName         string `json:"full_name" binding:"required"`
+	Email            string `json:"email"`
+	Phone            string `json:"phone"`
+	UserID           string `json:"user_id"`
+	EmploymentTypeID string `json:"employment_type_id"`
 }
 
 type teacherStatusRequest struct {
@@ -416,12 +418,13 @@ func (h *masterDataHandler) CreateTeacher(c *gin.Context) {
 		return
 	}
 	teacher, err := h.service.CreateTeacher(c.Request.Context(), actor, masterdata.TeacherInput{
-		EmployeeNumber: req.EmployeeNumber,
-		FullName:       req.FullName,
-		Email:          req.Email,
-		Phone:          req.Phone,
-		UserID:         req.UserID,
-		Status:         req.Status,
+		EmployeeNumber:   req.EmployeeNumber,
+		FullName:         req.FullName,
+		Email:            req.Email,
+		Phone:            req.Phone,
+		UserID:           req.UserID,
+		Status:           req.Status,
+		EmploymentTypeID: req.EmploymentTypeID,
 	}, response.RequestID(c))
 	if err != nil {
 		h.writeError(c, err)
@@ -442,11 +445,12 @@ func (h *masterDataHandler) UpdateTeacher(c *gin.Context) {
 		return
 	}
 	teacher, err := h.service.UpdateTeacher(c.Request.Context(), actor, c.Param("id"), masterdata.TeacherUpdateInput{
-		EmployeeNumber: req.EmployeeNumber,
-		FullName:       req.FullName,
-		Email:          req.Email,
-		Phone:          req.Phone,
-		UserID:         req.UserID,
+		EmployeeNumber:   req.EmployeeNumber,
+		FullName:         req.FullName,
+		Email:            req.Email,
+		Phone:            req.Phone,
+		UserID:           req.UserID,
+		EmploymentTypeID: req.EmploymentTypeID,
 	}, response.RequestID(c))
 	if err != nil {
 		h.writeError(c, err)

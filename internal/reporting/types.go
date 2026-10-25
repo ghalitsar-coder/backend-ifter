@@ -23,16 +23,28 @@ type DashboardFilter struct {
 }
 
 type Dashboard struct {
-	Date               string              `json:"date"`
-	Role               string              `json:"role"`
-	Attendance         DashboardAttendance `json:"attendance"`
-	Discipline         DashboardDiscipline `json:"discipline"`
-	ActiveStudents     *int32              `json:"active_students,omitempty"`
-	ActiveTeachers     *int32              `json:"active_teachers,omitempty"`
-	Trend              []TrendPoint        `json:"trend"`
-	LateStudents       []LateStudent       `json:"late_students"`
-	UnrecordedStudents []UnrecordedStudent `json:"unrecorded_students"`
-	RecentActivity     []AuditLog          `json:"recent_activity,omitempty"`
+	Date                    string                      `json:"date"`
+	Role                    string                      `json:"role"`
+	Attendance              DashboardAttendance         `json:"attendance"`
+	Discipline              DashboardDiscipline         `json:"discipline"`
+	ActiveStudents          *int32                      `json:"active_students,omitempty"`
+	ActiveTeachers          *int32                      `json:"active_teachers,omitempty"`
+	ActiveTeachersBreakdown *TeacherEmploymentBreakdown `json:"active_teachers_breakdown,omitempty"`
+	Trend                   []TrendPoint                `json:"trend"`
+	LateStudents            []LateStudent               `json:"late_students"`
+	UnrecordedStudents      []UnrecordedStudent         `json:"unrecorded_students"`
+	RecentActivity          []AuditLog                  `json:"recent_activity,omitempty"`
+}
+
+// TeacherEmploymentBreakdown is the employment-type package's addition to
+// GET /dashboard (package spec): active teachers counted server-side by the
+// three contract employment categories; unknown = teachers whose
+// employment_type_id is NULL (the migration-000013 "NULL = unknown" backfill).
+type TeacherEmploymentBreakdown struct {
+	Permanent int32 `json:"permanent"`
+	Honorary  int32 `json:"honorary"`
+	StaffTU   int32 `json:"staff_tu"`
+	Unknown   int32 `json:"unknown"`
 }
 
 type DashboardAttendance struct {

@@ -63,7 +63,7 @@ func TestAttendanceAPI(t *testing.T) {
 		if rec := env.request(t, http.MethodGet, "/api/v1/attendance/roster?class_id="+data.classID+"&date="+attendanceDay, nil, ""); rec.Code != http.StatusUnauthorized {
 			t.Fatalf("anonymous roster status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		if rec := env.request(t, http.MethodGet, "/api/v1/attendance/roster?class_id="+data.classID+"&date="+attendanceDay, nil, data.principalToken); rec.Code != http.StatusOK {
+		if rec := env.request(t, http.MethodGet, "/api/v1/attendance/roster?class_id="+data.classID+"&date="+attendanceDay, nil, data.principalToken); rec.Code != http.StatusForbidden {
 			t.Fatalf("principal roster status = %d, body = %s", rec.Code, rec.Body.String())
 		}
 		if rec := env.request(t, http.MethodPost, "/api/v1/attendance/bulk", map[string]any{

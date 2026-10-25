@@ -13,9 +13,9 @@ import (
 
 var (
 	studentTemplateHeaders = []string{"NIS", "NISN", "Nama Lengkap", "Jenis Kelamin", "Tanggal Lahir", "Tahun Masuk", "Status", "Nama Wali", "Telepon Wali", "Tahun Ajaran", "Kelas", "Tanggal Mulai Kelas"}
-	teacherTemplateHeaders = []string{"NIP", "Nama Lengkap", "Email", "Telepon", "Status"}
+	teacherTemplateHeaders = []string{"NIP", "Nama Lengkap", "Email", "Telepon", "Status", "Jenis Kepegawaian"}
 	studentExportHeaders   = studentTemplateHeaders
-	teacherExportHeaders   = []string{"NIP", "Nama Lengkap", "Email", "Telepon", "Status"}
+	teacherExportHeaders   = []string{"NIP", "Nama Lengkap", "Email", "Telepon", "Status", "Jenis Kepegawaian"}
 )
 
 func (s *Service) Template(entity Entity) ([]byte, error) {
@@ -37,11 +37,12 @@ func (s *Service) Template(entity Entity) ([]byte, error) {
 		return buildTemplate("Data Guru", teacherTemplateHeaders, []string{
 			"Kolom NIP dan Nama Lengkap wajib diisi.",
 			"Email harus valid jika diisi. Status: active atau inactive.",
+			"Jenis Kepegawaian opsional: Permanent, Honorer, atau Staf TU. Nilai tidak dikenal = baris tetap diimpor tanpa jenis kepegawaian (peringatan).",
 			"Format kolom NIP sebagai teks agar angka nol di depan tidak hilang.",
 			"Import tidak membuat akun atau password login.",
 			"Sheet Contoh hanya ilustrasi format; isi data pada sheet Data Guru.",
 		}, []string{
-			"T0001", "Contoh Guru", "guru@example.com", "081234567890", "active",
+			"T0001", "Contoh Guru", "guru@example.com", "081234567890", "active", "Permanent",
 		})
 	default:
 		return nil, ErrInvalidInput
@@ -243,6 +244,7 @@ func (s *Service) ExportTeachers(ctx context.Context, filter ExportFilter) ([]by
 			row.Email.String,
 			row.Phone.String,
 			row.Status,
+			row.EmploymentTypeName.String,
 		})
 	}
 	return buildExport("Data Guru", teacherExportHeaders, data)

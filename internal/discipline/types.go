@@ -117,6 +117,14 @@ type CategorySummary struct {
 	Points       int32  `json:"points"`
 }
 
+// SanctionLevel is the current sanction tier matched against a student's
+// accumulated points (sanction-rules package, migration 000012). It mirrors
+// the {level, action} shape contracted for current_level.
+type SanctionLevel struct {
+	Level  string `json:"level"`
+	Action string `json:"action"`
+}
+
 type StudentSummary struct {
 	StudentID     string            `json:"student_id"`
 	StudentNumber string            `json:"student_number"`
@@ -125,6 +133,9 @@ type StudentSummary struct {
 	TotalRecords  int               `json:"total_records"`
 	Categories    []CategorySummary `json:"categories"`
 	Records       []Record          `json:"records"`
+	// CurrentLevel is the sanction rule matching TotalPoints; nil when no
+	// active rule covers the total (docs sanction-rules package spec).
+	CurrentLevel *SanctionLevel `json:"current_level"`
 }
 
 type ReportFilter struct {

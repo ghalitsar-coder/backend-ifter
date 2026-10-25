@@ -130,6 +130,18 @@ func (s *Service) Dashboard(ctx context.Context, actor Actor, filter DashboardFi
 		activeTeachers := counts.ActiveTeachers
 		result.ActiveStudents = &activeStudents
 		result.ActiveTeachers = &activeTeachers
+		// Employment-type package: school-wide active teacher breakdown by
+		// employment category (counts teachers.status = 'active' server-side).
+		breakdown, err := s.queries.DashboardTeacherEmploymentBreakdown(ctx)
+		if err != nil {
+			return Dashboard{}, fmt.Errorf("dashboard teacher employment breakdown: %w", err)
+		}
+		result.ActiveTeachersBreakdown = &TeacherEmploymentBreakdown{
+			Permanent: breakdown.Permanent,
+			Honorary:  breakdown.Honorary,
+			StaffTU:   breakdown.StaffTu,
+			Unknown:   breakdown.Unknown,
+		}
 	}
 	if scope.isAdmin {
 		recent, err := s.ListAuditLogs(ctx, actor, AuditLogFilter{Limit: 10})
