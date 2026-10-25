@@ -222,7 +222,57 @@ async function uploadTemplate(path: string, template: Uint8Array) {
   return { res, text, json };
 }
 
-describe('backend-ifter API', { serial: true, timeout: 120_000 }, () => {
+// ---------------------------------------------------------------------------
+// Wave-2 helpers (dispensations multipart, presence timestamps)
+// ---------------------------------------------------------------------------
+
+const ROTATION_WED_1 = '2026-09-02';
+const ROTATION_WED_2 = '2026-09-09';
+const UNKNOWN_TEACHER_UUID = 'f7a9c214-2c3b-4a1e-9d2f-000000000e20';
+const SCHOOL_LAT = -6.2;
+const SCHOOL_LNG = 106.816666;
+
+function pdfDocumentBytes(): Uint8Array {
+  return new TextEncoder().encode('%PDF-1.4\n1 0 obj <<>> endobj\ntrailer <<>>\n%%EOF\n');
+}
+
+async function createDispensation(
+  token: string,
+  fields: Record<string, string>,
+  document?: { filename: string; contentType: string; bytes: Uint8Array },
+): Promise<ApiResult> {
+  if (!document) {
+    return request('/api/v1/dispensations', { method: 'POST', token, body: fields });
+  }
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    form.set(key, value);
+  }
+  form.set('document', new Blob([document.bytes], { type: document.contentType }), document.filename);
+  const res = await fetch(`${API_URL}/api/v1/dispensations`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  return { res, text, json };
+}
+
+async function downloadBinary(path: string, token: string) {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  return { res, bytes };
+}
+
+describe('backend-ifter API', { serial: true, timeout: 300_000 }, () => {
   beforeAll(async () => {
     requireConfig();
     const admin = await login(ADMIN_USER, ADMIN_PASSWORD);
@@ -738,7 +788,17 @@ describe('backend-ifter API', { serial: true, timeout: 120_000 }, () => {
       `/api/v1/attendance/roster?class_id=${seed.classBID}&date=${ATTENDANCE_DATE}`,
       { token: seed.principalToken },
     );
-    expectStatus(principalRoster, 200, 'principal roster');
+    // Wave-2 RBAC: roster is the recording screen and lives on AttendanceOps
+    // (admin+teacher+duty_teacher); principal is read-only and must not reach it.
+    // See docs/API_ADDENDUM.md (RBAC drift notes).
+    expectStatus(principalRoster, 403, 'principal roster');
+    expect(principalRoster.json.code).toBe('forbidden');
+
+    const principalHistory = await request(
+      `/api/v1/attendance/history?from=${ATTENDANCE_DATE}&to=${ATTENDANCE_DATE}&class_id=${seed.classBID}`,
+      { token: seed.principalToken },
+    );
+    expectStatus(principalHistory, 200, 'principal attendance history');
 
     const dutyRoster = await request(
       `/api/v1/attendance/roster?class_id=${seed.classAID}&date=${ATTENDANCE_DATE}`,
@@ -1142,6 +1202,918 @@ describe('backend-ifter API', { serial: true, timeout: 120_000 }, () => {
 
     const forbidden = await request('/api/v1/imports', { token: seed.teacherToken });
     expectStatus(forbidden, 403, 'teacher list imports');
+  });
+
+  test('teacher presence: geofence, check-in, check-out, staff credential reset', async () => {
+    const geofence = await request('/api/v1/geofence', { token: seed.principalToken });
+    expectStatus(geofence, 200, 'read geofence');
+    expect(geofence.json.latitude).toBe(SCHOOL_LAT);
+    expect(geofence.json.longitude).toBe(SCHOOL_LNG);
+
+    const forbiddenGeofence = await request('/api/v1/geofence', {
+      method: 'PUT',
+      token: seed.teacherToken,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG, radius_meters: 500, is_enabled: true },
+    });
+    expectStatus(forbiddenGeofence, 403, 'teacher update geofence');
+
+    const badRadius = await request('/api/v1/geofence', {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG, radius_meters: 0, is_enabled: true },
+    });
+    expectStatus(badRadius, 400, 'geofence radius out of bounds');
+
+    const updatedGeofence = await request('/api/v1/geofence', {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG, radius_meters: 500, is_enabled: true },
+    });
+    expectStatus(updatedGeofence, 200, 'update geofence');
+    expect(updatedGeofence.json.radius_meters).toBe(500);
+
+    const presenceUser = await createActivatedUser('e2e.presence', 'E2E Presence Teacher', ['teacher']);
+    const presenceTeacherID = await createTeacher('E2E-T9', 'E2E Presence Teacher', presenceUser.id);
+
+    const earlyCheckOut = await request('/api/v1/teacher-presence/check-out', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG },
+    });
+    expectStatus(earlyCheckOut, 409, 'check-out without check-in');
+
+    const futureFix = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG, check_time: '2099-01-01T00:00:00Z' },
+    });
+    expectStatus(futureFix, 400, 'check-in with future check_time');
+
+    const staleFix = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: {
+        latitude: SCHOOL_LAT,
+        longitude: SCHOOL_LNG,
+        check_time: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    expectStatus(staleFix, 400, 'check-in older than 24h');
+
+    const badCoordinates = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: { latitude: 95, longitude: SCHOOL_LNG },
+    });
+    expectStatus(badCoordinates, 400, 'check-in with invalid latitude');
+
+    const forbiddenCheckIn = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: seed.principalToken,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG },
+    });
+    expectStatus(forbiddenCheckIn, 403, 'principal check-in');
+
+    const noProfileCheckIn = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG },
+    });
+    expectStatus(noProfileCheckIn, 403, 'admin without teacher profile check-in');
+
+    const checkIn = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG, accuracy: 10, notes: 'presence e2e' },
+    });
+    expectStatus(checkIn, 201, 'teacher check-in');
+    expect(checkIn.json.teacher_id).toBe(presenceTeacherID);
+    expect(checkIn.json.within_geofence).toBe(true);
+    expect(checkIn.json.distance_meters).toBeLessThan(1);
+
+    const doubleCheckIn = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG },
+    });
+    expectStatus(doubleCheckIn, 409, 'duplicate check-in same day');
+
+    const earlyCheckOutAfter = await request('/api/v1/teacher-presence/check-out', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: {
+        latitude: SCHOOL_LAT,
+        longitude: SCHOOL_LNG,
+        check_time: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    expectStatus(earlyCheckOutAfter, 400, 'check-out before check-in');
+
+    const checkOut = await request('/api/v1/teacher-presence/check-out', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG },
+    });
+    expectStatus(checkOut, 201, 'teacher check-out');
+    expect(checkOut.json.check_out_within_geofence).toBe(true);
+    expect(checkOut.json.duration_minutes).toBeLessThan(5);
+
+    const doubleCheckOut = await request('/api/v1/teacher-presence/check-out', {
+      method: 'POST',
+      token: presenceUser.token,
+      body: { latitude: SCHOOL_LAT, longitude: SCHOOL_LNG },
+    });
+    expectStatus(doubleCheckOut, 409, 'duplicate check-out same day');
+
+    const outsideCheckIn = await request('/api/v1/teacher-presence/check-in', {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: { latitude: -6.3, longitude: 106.816666 },
+    });
+    expectStatus(outsideCheckIn, 201, 'duty teacher outside-geofence check-in');
+    expect(outsideCheckIn.json.within_geofence).toBe(false);
+    expect(outsideCheckIn.json.distance_meters).toBeGreaterThan(500);
+
+    const today = await request('/api/v1/teacher-presence/today', { token: presenceUser.token });
+    expectStatus(today, 200, 'presence today');
+    expect(today.json.teacher_id).toBe(presenceTeacherID);
+    expect(today.json.check_in_at).toBeTruthy();
+    expect(today.json.check_out_at).toBeTruthy();
+
+    const history = await request(
+      '/api/v1/teacher-presence/history?from=2020-01-01&to=2099-12-31&limit=100',
+      { token: presenceUser.token },
+    );
+    expectStatus(history, 200, 'presence history');
+    expect(history.json.total).toBe(1);
+    expect(history.json.data[0].presence_date).toBe(checkIn.json.presence_date);
+
+    const forbiddenHistory = await request('/api/v1/teacher-presence/history', {
+      token: seed.principalToken,
+    });
+    expectStatus(forbiddenHistory, 403, 'principal presence history');
+
+    const reset = await request(`/api/v1/users/${presenceUser.id}/credential-reset`, {
+      method: 'POST',
+      token: seed.adminToken,
+    });
+    expectStatus(reset, 200, 'staff credential reset');
+    expect(reset.json.credential.purpose).toBe('reset');
+    expect(reset.json.credential.token).toBeTruthy();
+
+    const shortResetPassword = await request('/api/v1/auth/activate', {
+      method: 'POST',
+      body: { token: reset.json.credential.token, password: 'ElevenChars' },
+    });
+    expectStatus(shortResetPassword, 400, 'activate rejects password shorter than 12');
+    expect(shortResetPassword.json.code).toBe('invalid_request');
+
+    const activateReset = await request('/api/v1/auth/activate', {
+      method: 'POST',
+      body: { token: reset.json.credential.token, password: 'E2eResetPass123!' },
+    });
+    expectStatus(activateReset, 204, 'activate with reset token');
+
+    const reusedResetToken = await request('/api/v1/auth/activate', {
+      method: 'POST',
+      body: { token: reset.json.credential.token, password: 'E2eAnotherPass123!' },
+    });
+    expectStatus(reusedResetToken, 400, 'reset token is single use');
+    expect(reusedResetToken.json.code).toBe('invalid_token');
+
+    const oldPasswordLogin = await request('/api/v1/auth/login', {
+      method: 'POST',
+      body: { login: 'e2e.presence', password: PASSWORD },
+    });
+    expectStatus(oldPasswordLogin, 401, 'login with the pre-reset password');
+
+    const newPasswordLogin = await login('e2e.presence', 'E2eResetPass123!');
+    expect(newPasswordLogin.token).toBeTruthy();
+  });
+
+  test('dispensations: create with document, verify, scoped reads', async () => {
+    const jsonCreate = await createDispensation(seed.adminToken, {
+      student_id: seed.student1ID,
+      type: 'sick',
+      reason: 'Demam e2e',
+      start_date: ATTENDANCE_DATE,
+      end_date: '2026-09-04',
+    });
+    expectStatus(jsonCreate, 201, 'create dispensation (json)');
+    expect(jsonCreate.json.dispensation.status).toBe('pending');
+    expect(jsonCreate.json.dispensation.class_id).toBe(seed.classAID);
+    expect(jsonCreate.json.dispensation.document_available).toBe(false);
+    const dispensation1ID = jsonCreate.json.dispensation.id as string;
+
+    const documentCreate = await createDispensation(
+      seed.teacherToken,
+      {
+        student_id: seed.student2ID,
+        type: 'permit',
+        reason: 'Klinik e2e',
+        start_date: ATTENDANCE_DATE,
+      },
+      { filename: 'surat.pdf', contentType: 'application/pdf', bytes: pdfDocumentBytes() },
+    );
+    expectStatus(documentCreate, 201, 'create dispensation (multipart + pdf)');
+    expect(documentCreate.json.dispensation.document_available).toBe(true);
+    const documentDispensationID = documentCreate.json.dispensation.id as string;
+
+    const otherClassCreate = await createDispensation(seed.teacherToken, {
+      student_id: seed.student4ID,
+      type: 'sick',
+      reason: 'Di luar wali kelas',
+      start_date: ATTENDANCE_DATE,
+    });
+    expectStatus(otherClassCreate, 403, 'teacher creates for other-class student');
+
+    const principalCreate = await createDispensation(seed.principalToken, {
+      student_id: seed.student1ID,
+      type: 'sick',
+      reason: 'Principal tidak berhak',
+      start_date: ATTENDANCE_DATE,
+    });
+    expectStatus(principalCreate, 403, 'principal cannot create dispensations');
+
+    const badType = await createDispensation(seed.adminToken, {
+      student_id: seed.student1ID,
+      type: 'vacation',
+      reason: 'Tipe tidak dikenal',
+      start_date: ATTENDANCE_DATE,
+    });
+    expectStatus(badType, 400, 'invalid dispensation type');
+
+    const reversedDates = await createDispensation(seed.adminToken, {
+      student_id: seed.student1ID,
+      type: 'sick',
+      reason: 'Rentang terbalik',
+      start_date: '2026-09-05',
+      end_date: ATTENDANCE_DATE,
+    });
+    expectStatus(reversedDates, 400, 'end before start');
+
+    const badDocument = await createDispensation(
+      seed.teacherToken,
+      {
+        student_id: seed.student2ID,
+        type: 'sick',
+        reason: 'Dokumen salah format',
+        start_date: ATTENDANCE_DATE,
+      },
+      { filename: 'catatan.txt', contentType: 'text/plain', bytes: new TextEncoder().encode('bukan pdf') },
+    );
+    expectStatus(badDocument, 400, 'document extension rejected');
+
+    const classBOther = await createDispensation(seed.adminToken, {
+      student_id: seed.student4ID,
+      type: 'late',
+      reason: 'Keperluan keluarga',
+      start_date: ATTENDANCE_DATE,
+    });
+    expectStatus(classBOther, 201, 'admin creates class B dispensation');
+    const classBDispensationID = classBOther.json.dispensation.id as string;
+
+    const list = await request(
+      `/api/v1/dispensations?student_id=${seed.student1ID}&status=pending&limit=100`,
+      { token: seed.adminToken },
+    );
+    expectStatus(list, 200, 'list dispensations');
+    expect(list.json.data.map((row: any) => row.id)).toContain(dispensation1ID);
+
+    const invalidStatus = await request('/api/v1/dispensations?status=bogus', { token: seed.adminToken });
+    expectStatus(invalidStatus, 400, 'invalid status filter rejected');
+
+    const scopedDetail = await request(`/api/v1/dispensations/${dispensation1ID}`, {
+      token: seed.teacherToken,
+    });
+    expectStatus(scopedDetail, 200, 'homeroom teacher reads own-class dispensation');
+
+    const forbiddenDetail = await request(`/api/v1/dispensations/${classBDispensationID}`, {
+      token: seed.teacherToken,
+    });
+    expectStatus(forbiddenDetail, 403, 'teacher cannot read other-class dispensation');
+
+    const forbiddenVerify = await request(`/api/v1/dispensations/${classBDispensationID}/verify`, {
+      method: 'POST',
+      token: seed.teacherToken,
+      body: { status: 'approved', note: 'bukan kelas saya' },
+    });
+    expectStatus(forbiddenVerify, 403, 'teacher verifies other-class dispensation');
+
+    const dutyVerify = await request(`/api/v1/dispensations/${classBDispensationID}/verify`, {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: { status: 'approved', note: 'disetujui guru piket' },
+    });
+    expectStatus(dutyVerify, 200, 'duty teacher verifies school-wide');
+    expect(dutyVerify.json.dispensation.status).toBe('approved');
+    expect(dutyVerify.json.dispensation.verified_by).toBeTruthy();
+
+    const verifyTwice = await request(`/api/v1/dispensations/${classBDispensationID}/verify`, {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { status: 'rejected' },
+    });
+    expectStatus(verifyTwice, 409, 'verify after decision');
+
+    const badDecision = await request(`/api/v1/dispensations/${dispensation1ID}/verify`, {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { status: 'pending' },
+    });
+    expectStatus(badDecision, 400, 'pending is not a decision');
+
+    const verify = await request(`/api/v1/dispensations/${dispensation1ID}/verify`, {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { status: 'approved', note: 'dipercaya e2e' },
+    });
+    expectStatus(verify, 200, 'verify dispensation');
+    expect(verify.json.dispensation.note).toBe('dipercaya e2e');
+
+    const document = await downloadBinary(`/api/v1/dispensations/${documentDispensationID}/document`, seed.adminToken);
+    expect(document.res.status).toBe(200);
+    expect(document.res.headers.get('content-type')).toContain('application/pdf');
+    expect(document.res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(String.fromCharCode(...document.bytes.slice(0, 4))).toBe('%PDF');
+
+    const missingDocument = await request(`/api/v1/dispensations/${dispensation1ID}/document`, {
+      token: seed.adminToken,
+    });
+    expectStatus(missingDocument, 404, 'document download without a document');
+
+    const studentPortalForbidden = await request('/api/v1/my/dispensations', { token: seed.teacherToken });
+    expectStatus(studentPortalForbidden, 403, 'teacher cannot use the student portal');
+  });
+
+  test('duty rotations and uniform reports', async () => {
+    const rotation = await request('/api/v1/duty-rotations', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: {
+        duty_assignment_id: seed.dutyID,
+        substitute_teacher_id: seed.teacherBID,
+        date: ROTATION_WED_1,
+        reason: 'Guru piket sakit',
+      },
+    });
+    expectStatus(rotation, 201, 'create duty rotation');
+    expect(rotation.json.duty_rotation.status).toBe('substituted');
+    expect(rotation.json.duty_rotation.weekday).toBe(3);
+    expect(rotation.json.duty_rotation.original_teacher_id).toBe(seed.teacher2ID);
+    expect(rotation.json.duty_rotation.substitute_teacher_name).toBe('E2E Substitute Teacher Updated');
+    const rotationID = rotation.json.duty_rotation.id as string;
+
+    const duplicate = await request('/api/v1/duty-rotations', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: {
+        duty_assignment_id: seed.dutyID,
+        substitute_teacher_id: seed.teacherBID,
+        date: ROTATION_WED_1,
+        reason: 'Duplikat',
+      },
+    });
+    expectStatus(duplicate, 409, 'duplicate rotation rejected');
+
+    const wrongWeekday = await request('/api/v1/duty-rotations', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: {
+        duty_assignment_id: seed.dutyID,
+        substitute_teacher_id: seed.teacherBID,
+        date: '2026-09-01',
+        reason: 'Bukan hari piket',
+      },
+    });
+    expectStatus(wrongWeekday, 400, 'rotation date must match assignment weekday');
+
+    const missingAssignment = await request('/api/v1/duty-rotations', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: {
+        duty_assignment_id: UNKNOWN_TEACHER_UUID,
+        substitute_teacher_id: seed.teacherBID,
+        date: ROTATION_WED_1,
+        reason: 'Assignment tidak ada',
+      },
+    });
+    expectStatus(missingAssignment, 404, 'unknown duty assignment');
+
+    const selfSubstitute = await request('/api/v1/duty-rotations', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: {
+        duty_assignment_id: seed.dutyID,
+        substitute_teacher_id: seed.teacher2ID,
+        date: ROTATION_WED_1,
+        reason: 'Menggantikan diri sendiri',
+      },
+    });
+    expectStatus(selfSubstitute, 400, 'substitute must differ from original');
+
+    const irrelevantCreate = await request('/api/v1/duty-rotations', {
+      method: 'POST',
+      token: seed.teacherToken,
+      body: {
+        duty_assignment_id: seed.dutyID,
+        substitute_teacher_id: seed.teacherBID,
+        date: ROTATION_WED_2,
+        reason: 'Bukan piket saya',
+      },
+    });
+    expectStatus(irrelevantCreate, 403, 'unrelated teacher cannot substitute');
+
+    const ownRotation = await request('/api/v1/duty-rotations', {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: {
+        duty_assignment_id: seed.dutyID,
+        substitute_teacher_id: seed.teacherBID,
+        date: ROTATION_WED_2,
+        reason: 'Silih sendiri',
+      },
+    });
+    expectStatus(ownRotation, 201, 'duty teacher substitutes own assignment');
+    const ownRotationID = ownRotation.json.duty_rotation.id as string;
+
+    const irrelevantCancel = await request(`/api/v1/duty-rotations/${ownRotationID}/cancel`, {
+      method: 'PATCH',
+      token: seed.teacherToken,
+      body: { reason: 'Tidak relevan' },
+    });
+    expectStatus(irrelevantCancel, 403, 'unrelated teacher cannot cancel');
+
+    const cancel = await request(`/api/v1/duty-rotations/${ownRotationID}/cancel`, {
+      method: 'PATCH',
+      token: seed.dutyToken,
+      body: { reason: 'Jadi hadir' },
+    });
+    expectStatus(cancel, 200, 'cancel rotation');
+    expect(cancel.json.duty_rotation.status).toBe('cancelled');
+    expect(cancel.json.duty_rotation.reason).toBe('Jadi hadir');
+
+    const cancelTwice = await request(`/api/v1/duty-rotations/${ownRotationID}/cancel`, {
+      method: 'PATCH',
+      token: seed.adminToken,
+      body: {},
+    });
+    expectStatus(cancelTwice, 409, 'cancel twice');
+
+    const adminList = await request(`/api/v1/duty-rotations?date=${ROTATION_WED_1}`, {
+      token: seed.adminToken,
+    });
+    expectStatus(adminList, 200, 'admin lists rotations');
+    expect(adminList.json.data.map((row: any) => row.id)).toContain(rotationID);
+
+    const dutyList = await request(`/api/v1/duty-rotations?date=${ROTATION_WED_1}`, {
+      token: seed.dutyToken,
+    });
+    expectStatus(dutyList, 200, 'duty teacher lists own rotations');
+    expect(dutyList.json.data.map((row: any) => row.id)).toContain(rotationID);
+
+    const teacherList = await request(`/api/v1/duty-rotations?date=${ROTATION_WED_1}`, {
+      token: seed.teacherToken,
+    });
+    expectStatus(teacherList, 200, 'unrelated teacher list is scoped');
+    expect(teacherList.json.data).toHaveLength(0);
+
+    const uniform = await request('/api/v1/uniform-reports', {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: {
+        for_date: ATTENDANCE_DATE,
+        teacher_id: seed.teacher2ID,
+        scope: 'student',
+        target_student_id: seed.student1ID,
+        note: 'Dasi tertinggal',
+      },
+    });
+    expectStatus(uniform, 201, 'duty teacher records uniform report');
+    expect(uniform.json.uniform_report.scope).toBe('student');
+    expect(uniform.json.uniform_report.target_student_id).toBe(seed.student1ID);
+
+    const uniformForbidden = await request('/api/v1/uniform-reports', {
+      method: 'POST',
+      token: seed.teacherToken,
+      body: { for_date: ATTENDANCE_DATE, teacher_id: seed.teacher1ID, scope: 'teacher' },
+    });
+    expectStatus(uniformForbidden, 403, 'plain teacher cannot write uniform reports');
+
+    const uniformReadForbidden = await request('/api/v1/uniform-reports', { token: seed.principalToken });
+    expectStatus(uniformReadForbidden, 403, 'principal cannot read uniform reports');
+
+    const uniformBadScope = await request('/api/v1/uniform-reports', {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: {
+        for_date: ATTENDANCE_DATE,
+        teacher_id: seed.teacher2ID,
+        scope: 'teacher',
+        target_student_id: seed.student1ID,
+      },
+    });
+    expectStatus(uniformBadScope, 400, 'teacher-scope note must not target a student');
+
+    const uniformUnknownTeacher = await request('/api/v1/uniform-reports', {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: { for_date: ATTENDANCE_DATE, teacher_id: UNKNOWN_TEACHER_UUID, scope: 'teacher' },
+    });
+    expectStatus(uniformUnknownTeacher, 404, 'unknown teacher for uniform report');
+
+    const uniformList = await request(
+      `/api/v1/uniform-reports?date=${ATTENDANCE_DATE}&teacher_id=${seed.teacher2ID}`,
+      { token: seed.adminToken },
+    );
+    expectStatus(uniformList, 200, 'list uniform reports');
+    expect(uniformList.json.data).toHaveLength(1);
+    expect(uniformList.json.data[0].note).toBe('Dasi tertinggal');
+  });
+
+  test('sanction rules: CRUD, replace-all and overlap conflicts', async () => {
+    const emptyList = await request('/api/v1/sanction-rules', { token: seed.teacherToken });
+    expectStatus(emptyList, 200, 'staff can read sanction rules');
+    expect(Array.isArray(emptyList.json.data)).toBe(true);
+
+    const forbiddenWrite = await request('/api/v1/sanction-rules', {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: { name: 'Tanpa hak', min_points: 0, max_points: 5, action: 'Teguran' },
+    });
+    expectStatus(forbiddenWrite, 403, 'duty teacher cannot write sanction rules');
+
+    const create = await request('/api/v1/sanction-rules', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { name: 'Teguran lisan', min_points: 0, max_points: 10, action: 'Teguran lisan', level: '1' },
+    });
+    expectStatus(create, 201, 'create sanction rule');
+    expect(create.json.sanction_rule.is_active).toBe(true);
+    const ruleID = create.json.sanction_rule.id as string;
+
+    const overlap = await request('/api/v1/sanction-rules', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { name: 'Tumpang tindih', min_points: 5, max_points: 15, action: 'Teguran tertulis' },
+    });
+    expectStatus(overlap, 409, 'overlapping range rejected');
+
+    const invertedRange = await request('/api/v1/sanction-rules', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { name: 'Rentang terbalik', min_points: 10, max_points: 3, action: 'Invalid' },
+    });
+    expectStatus(invertedRange, 400, 'max_points must exceed min_points');
+
+    const openTop = await request('/api/v1/sanction-rules', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { name: 'Pengeluaran', min_points: 11, action: 'Surat peringatan', level: '2' },
+    });
+    expectStatus(openTop, 201, 'open-ended top tier');
+    const openTopID = openTop.json.sanction_rule.id as string;
+
+    const collideUpdate = await request(`/api/v1/sanction-rules/${ruleID}`, {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: { name: 'Teguran lisan', min_points: 12, action: 'Teguran lisan' },
+    });
+    expectStatus(collideUpdate, 409, 'update into another active range');
+
+    const update = await request(`/api/v1/sanction-rules/${ruleID}`, {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: { name: 'Teguran lisan diperbarui', min_points: 0, max_points: 10, action: 'Teguran lisan', level: '1' },
+    });
+    expectStatus(update, 200, 'update sanction rule');
+    expect(update.json.sanction_rule.name).toBe('Teguran lisan diperbarui');
+
+    const detail = await request(`/api/v1/sanction-rules/${ruleID}`, { token: seed.principalToken });
+    expectStatus(detail, 200, 'get sanction rule');
+    expect(detail.json.sanction_rule.id).toBe(ruleID);
+
+    const deactivateTop = await request(`/api/v1/sanction-rules/${openTopID}/status`, {
+      method: 'PATCH',
+      token: seed.adminToken,
+      body: { is_active: false },
+    });
+    expectStatus(deactivateTop, 200, 'deactivate rule');
+    expect(deactivateTop.json.sanction_rule.is_active).toBe(false);
+
+    const reuseInactiveRange = await request('/api/v1/sanction-rules', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { name: 'Rentang baru', min_points: 11, max_points: 20, action: 'Panggilan orang tua' },
+    });
+    expectStatus(reuseInactiveRange, 201, 'inactive ranges do not collide');
+    const reuseID = reuseInactiveRange.json.sanction_rule.id as string;
+
+    const reactivateCollision = await request(`/api/v1/sanction-rules/${openTopID}/status`, {
+      method: 'PATCH',
+      token: seed.adminToken,
+      body: { is_active: true },
+    });
+    expectStatus(reactivateCollision, 409, 'reactivation re-checks overlaps');
+
+    const deactivateReuse = await request(`/api/v1/sanction-rules/${reuseID}/status`, {
+      method: 'PATCH',
+      token: seed.adminToken,
+      body: { is_active: false },
+    });
+    expectStatus(deactivateReuse, 200, 'deactivate reused range');
+
+    const reactivate = await request(`/api/v1/sanction-rules/${openTopID}/status`, {
+      method: 'PATCH',
+      token: seed.adminToken,
+      body: { is_active: true },
+    });
+    expectStatus(reactivate, 200, 'reactivate after conflict cleared');
+
+    const deleteRemoved = await request(`/api/v1/sanction-rules/${reuseID}`, {
+      method: 'DELETE',
+      token: seed.adminToken,
+    });
+    expectStatus(deleteRemoved, 204, 'delete sanction rule');
+    const missing = await request(`/api/v1/sanction-rules/${reuseID}`, { token: seed.adminToken });
+    expectStatus(missing, 404, 'deleted rule is gone');
+
+    const replaceOverlap = await request('/api/v1/sanction-rules', {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: {
+        rules: [
+          { min_points: 0, max_points: 10, action: 'Pembinaan' },
+          { min_points: 5, max_points: 15, action: 'Surat peringatan' },
+        ],
+      },
+    });
+    expectStatus(replaceOverlap, 409, 'replace payload with internal overlap rejected');
+
+    const missingRulesKey = await request('/api/v1/sanction-rules', {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: {},
+    });
+    expectStatus(missingRulesKey, 400, 'replace requires a rules array');
+
+    const replace = await request('/api/v1/sanction-rules', {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: {
+        rules: [
+          { min_points: 0, max_points: 10, action: 'Pembinaan', level: '1' },
+          { min_points: 11, action: 'Surat peringatan', level: '2' },
+        ],
+      },
+    });
+    expectStatus(replace, 200, 'replace all rules');
+    expect(replace.json.data).toHaveLength(2);
+
+    const studentSummary = await request(`/api/v1/discipline/students/${seed.student1ID}`, {
+      token: seed.adminToken,
+    });
+    expectStatus(studentSummary, 200, 'student summary with current level');
+    expect(studentSummary.json.total_points).toBeGreaterThanOrEqual(8);
+    expect(studentSummary.json.current_level).not.toBeNull();
+    expect(studentSummary.json.current_level.action).toBe('Pembinaan');
+  });
+
+  test('employment types and teacher employment assignment', async () => {
+    const forbidden = await request('/api/v1/employment-types', { token: seed.teacherToken });
+    expectStatus(forbidden, 403, 'teacher cannot read employment types');
+
+    const list = await request('/api/v1/employment-types', { token: seed.adminToken });
+    expectStatus(list, 200, 'list employment types');
+    const codes = list.json.data.map((row: any) => row.code);
+    expect(codes).toEqual(expect.arrayContaining(['permanent', 'honorary', 'staff_tu']));
+    const permanent = list.json.data.find((row: any) => row.code === 'permanent');
+
+    const create = await request('/api/v1/employment-types', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { code: 'e2e_contract', name: 'Kontrak E2E', description: 'Jenis kepegawaian uji e2e' },
+    });
+    expectStatus(create, 201, 'create employment type');
+    expect(create.json.employment_type.is_active).toBe(true);
+    const employmentID = create.json.employment_type.id as string;
+
+    const duplicate = await request('/api/v1/employment-types', {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { code: 'e2e_contract', name: 'Duplikat' },
+    });
+    expectStatus(duplicate, 409, 'duplicate code rejected');
+
+    const detail = await request(`/api/v1/employment-types/${employmentID}`, { token: seed.adminToken });
+    expectStatus(detail, 200, 'get employment type');
+
+    const update = await request(`/api/v1/employment-types/${employmentID}`, {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: { code: 'e2e_contract', name: 'Kontrak E2E Diperbarui' },
+    });
+    expectStatus(update, 200, 'update employment type');
+    expect(update.json.employment_type.name).toBe('Kontrak E2E Diperbarui');
+
+    const deactivate = await request(`/api/v1/employment-types/${employmentID}/status`, {
+      method: 'PATCH',
+      token: seed.adminToken,
+      body: { is_active: false },
+    });
+    expectStatus(deactivate, 200, 'deactivate employment type');
+    expect(deactivate.json.employment_type.is_active).toBe(false);
+
+    const teacherUpdate = await request(`/api/v1/teachers/${seed.teacher1ID}`, {
+      method: 'PUT',
+      token: seed.adminToken,
+      body: {
+        employee_number: 'E2E-T1',
+        full_name: 'E2E Teacher',
+        email: 'e2e-t1@example.test',
+        employment_type_id: permanent.id,
+      },
+    });
+    expectStatus(teacherUpdate, 200, 'assign employment type to teacher');
+    expect(teacherUpdate.json.teacher.employment_type_id).toBe(permanent.id);
+    expect(teacherUpdate.json.teacher.employment_type_name).toBe('Permanen (PNS/PPPK)');
+
+    const dashboard = await request(`/api/v1/dashboard?date=${ATTENDANCE_DATE}`, { token: seed.adminToken });
+    expectStatus(dashboard, 200, 'dashboard employment breakdown');
+    expect(dashboard.json.active_teachers_breakdown.permanent).toBeGreaterThanOrEqual(1);
+  });
+
+  test('student accounts: provision, activate, /my portal, deactivate', async () => {
+    const noAccount = await request(`/api/v1/students/${seed.student1ID}/account`, { token: seed.adminToken });
+    expectStatus(noAccount, 200, 'account lookup before provisioning');
+    expect(noAccount.json.account.user_id).toBeNull();
+
+    const forbiddenProvision = await request(`/api/v1/students/${seed.student1ID}/account`, {
+      method: 'POST',
+      token: seed.dutyToken,
+      body: { username: 'e2e.notallowed' },
+    });
+    expectStatus(forbiddenProvision, 403, 'only admin provisions student accounts');
+
+    const provision = await request(`/api/v1/students/${seed.student1ID}/account`, {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { username: 'e2e.student1', email: 'e2e.student1@example.test' },
+    });
+    expectStatus(provision, 201, 'provision student account');
+    expect(provision.json.user.status).toBe('pending');
+    expect(provision.json.user.roles).toEqual(['student']);
+    expect(provision.json.credential.purpose).toBe('invite');
+    expect(provision.json.credential.token).toBeTruthy();
+
+    const secondProvision = await request(`/api/v1/students/${seed.student1ID}/account`, {
+      method: 'POST',
+      token: seed.adminToken,
+      body: {},
+    });
+    expectStatus(secondProvision, 409, 'provisioning a linked student conflicts');
+
+    const shortPassword = await request('/api/v1/auth/activate', {
+      method: 'POST',
+      body: { token: provision.json.credential.token, password: 'ElevenChars' },
+    });
+    expectStatus(shortPassword, 400, 'invite activation enforces 12-character minimum');
+
+    const activate = await request('/api/v1/auth/activate', {
+      method: 'POST',
+      body: { token: provision.json.credential.token, password: 'E2eStudentPass123!' },
+    });
+    expectStatus(activate, 204, 'activate student invite');
+
+    const reusedToken = await request('/api/v1/auth/activate', {
+      method: 'POST',
+      body: { token: provision.json.credential.token, password: 'E2eStudentPass456!' },
+    });
+    expectStatus(reusedToken, 400, 'invite token is single use');
+    expect(reusedToken.json.code).toBe('invalid_token');
+
+    const studentSession = await login('e2e.student1', 'E2eStudentPass123!');
+    const studentToken = studentSession.token;
+
+    const linkedAccount = await request(`/api/v1/students/${seed.student1ID}/account`, { token: seed.adminToken });
+    expectStatus(linkedAccount, 200, 'account lookup after activation');
+    expect(linkedAccount.json.account.username).toBe('e2e.student1');
+    expect(linkedAccount.json.account.status).toBe('active');
+
+    const profile = await request('/api/v1/my/profile', { token: studentToken });
+    expectStatus(profile, 200, 'student profile');
+    expect(profile.json.profile.student_id).toBe(seed.student1ID);
+    expect(profile.json.profile.class_id).toBe(seed.classAID);
+
+    const myAttendance = await request(
+      `/api/v1/my/attendance?from=2026-09-01&to=2026-09-30&limit=100`,
+      { token: studentToken },
+    );
+    expectStatus(myAttendance, 200, 'my attendance');
+    expect(myAttendance.json.total).toBeGreaterThanOrEqual(1);
+    expect(myAttendance.json.data.some((row: any) => row.status === 'late')).toBe(true);
+
+    const mySummaryAlias = await request(
+      `/api/v1/my/attendance-history?from=2026-09-01&to=2026-09-30`,
+      { token: studentToken },
+    );
+    expectStatus(mySummaryAlias, 200, 'attendance-history alias');
+    expect(mySummaryAlias.json.total).toBe(myAttendance.json.total);
+
+    const myAttendanceSummary = await request('/api/v1/my/attendance-summary?from=2026-09-01&to=2026-09-30', {
+      token: studentToken,
+    });
+    expectStatus(myAttendanceSummary, 200, 'my attendance summary');
+
+    const myDiscipline = await request('/api/v1/my/discipline?from=2026-09-01&to=2026-09-30', {
+      token: studentToken,
+    });
+    expectStatus(myDiscipline, 200, 'my discipline records');
+    expect(myDiscipline.json.total).toBeGreaterThanOrEqual(1);
+
+    const myDisciplineSummary = await request('/api/v1/my/discipline-summary?from=2026-09-01&to=2026-09-30', {
+      token: studentToken,
+    });
+    expectStatus(myDisciplineSummary, 200, 'my discipline summary');
+    expect(myDisciplineSummary.json.total_points).toBeGreaterThanOrEqual(8);
+
+    const myDispensation = await request('/api/v1/my/dispensations', {
+      method: 'POST',
+      token: studentToken,
+      body: {
+        student_id: seed.student4ID,
+        type: 'sick',
+        reason: 'Permisi dari siswa',
+        start_date: '2026-09-15',
+      },
+    });
+    expectStatus(myDispensation, 201, 'student requests own dispensation');
+    expect(myDispensation.json.dispensation.student_id).toBe(seed.student1ID);
+
+    const myDispensationList = await request('/api/v1/my/dispensations?status=pending', { token: studentToken });
+    expectStatus(myDispensationList, 200, 'student lists own dispensations');
+    expect(myDispensationList.json.total).toBe(1);
+
+    const teacherPortalForbidden = await request('/api/v1/my/profile', { token: seed.teacherToken });
+    expectStatus(teacherPortalForbidden, 403, 'teachers have no /my portal');
+
+    const lonely = await createActivatedUser('e2e.lonely', 'E2E Lonely Student', ['student']);
+    const lonelyProfile = await request('/api/v1/my/profile', { token: lonely.token });
+    expectStatus(lonelyProfile, 403, 'unlinked student login is rejected');
+
+    const inactiveStudent = await request(`/api/v1/students/${seed.student5ID}/account`, {
+      method: 'POST',
+      token: seed.adminToken,
+      body: {},
+    });
+    expectStatus(inactiveStudent, 409, 'inactive students cannot be provisioned');
+
+    const deactivateAccount = await request(`/api/v1/students/${seed.student1ID}/account`, {
+      method: 'DELETE',
+      token: seed.adminToken,
+    });
+    expectStatus(deactivateAccount, 204, 'deactivate student account');
+
+    const afterDeactivate = await request('/api/v1/my/profile', { token: studentToken });
+    // DELETE /students/:id/account deactivates the login user and revokes its
+    // sessions (docs/API_ADDENDUM.md), so the stale JWT fails authentication
+    // outright — 401, not the 403 a linked-but-profile-less user gets.
+    expectStatus(afterDeactivate, 401, 'portal blocked after account deactivation');
+
+    const clearedAccount = await request(`/api/v1/students/${seed.student1ID}/account`, { token: seed.adminToken });
+    expectStatus(clearedAccount, 200, 'account lookup after deactivation');
+    expect(clearedAccount.json.account.user_id).toBeNull();
+
+    const reprovision = await request(`/api/v1/students/${seed.student1ID}/account`, {
+      method: 'POST',
+      token: seed.adminToken,
+      body: { username: 'e2e.student1.again' },
+    });
+    expectStatus(reprovision, 201, 're-provisioning after unlink works');
+  });
+
+  test('audit logs record wave-2 write actions', async () => {
+    const actions = [
+      'geofence.update',
+      'dispensation.verify',
+      'duty.substitution',
+      'duty.substitution.cancel',
+      'sanction_rule.create',
+      'sanction_rule.replace',
+      'employment_type.create',
+      'student_account.create',
+      'student_account.delete',
+      'user.password.reset',
+    ];
+    for (const action of actions) {
+      const logs = await request(`/api/v1/audit-logs?action=${action}&limit=100`, { token: seed.adminToken });
+      expectStatus(logs, 200, `audit logs for ${action}`);
+      expect(logs.json.total).toBeGreaterThanOrEqual(1);
+      expect(logs.json.data.every((row: any) => row.action === action)).toBe(true);
+    }
+
+    const forbidden = await request('/api/v1/audit-logs', { token: seed.dutyToken });
+    expectStatus(forbidden, 403, 'duty teacher cannot read audit logs');
   });
 
   test('metrics reflect completed API traffic', async () => {

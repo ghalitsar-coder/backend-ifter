@@ -8,7 +8,15 @@ E2E_DB="${E2E_DB:-ifter_e2e}"
 E2E_PORT="${E2E_PORT:-8081}"
 E2E_ADMIN_USER="${E2E_ADMIN_USER:-e2e-admin}"
 E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-E2eAdminPass123!}"
-DATABASE_URL="postgres://ifter:ifter@localhost:5432/${E2E_DB}?sslmode=disable"
+# External database overrides. When E2E_PG_CONTAINER is set, the script uses an
+# already-running Postgres container instead of `docker compose up postgres`
+# (useful when host port 5432 is taken by another project).
+E2E_PG_HOST="${E2E_PG_HOST:-localhost}"
+E2E_PG_PORT="${E2E_PG_PORT:-5432}"
+E2E_PG_USER="${E2E_PG_USER:-ifter}"
+E2E_PG_PASSWORD="${E2E_PG_PASSWORD:-ifter}"
+E2E_PG_CONTAINER="${E2E_PG_CONTAINER:-}"
+DATABASE_URL="postgres://${E2E_PG_USER}:${E2E_PG_PASSWORD}@${E2E_PG_HOST}:${E2E_PG_PORT}/${E2E_DB}?sslmode=disable"
 SERVER_LOG="${E2E_SERVER_LOG:-/tmp/opencode/ifter-e2e-server.log}"
 API_BIN="${E2E_API_BIN:-/tmp/opencode/ifter-e2e-api}"
 IMPORTS_DIR="${E2E_IMPORTS_DIR:-/tmp/opencode/ifter-e2e-imports}"
@@ -27,17 +35,29 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-docker compose up -d postgres >/dev/null
-for _ in $(seq 1 30); do
-  if docker compose exec -T postgres pg_isready -U ifter -d ifter >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
+if [ -n "$E2E_PG_CONTAINER" ]; then
+  for _ in $(seq 1 30); do
+    if docker exec "$E2E_PG_CONTAINER" pg_isready -U "$E2E_PG_USER" -d postgres >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  docker exec "$E2E_PG_CONTAINER" psql -U "$E2E_PG_USER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "DROP DATABASE IF EXISTS \"${E2E_DB}\" WITH (FORCE);" \
+    -c "CREATE DATABASE \"${E2E_DB}\";" >/dev/null
+else
+  docker compose up -d postgres >/dev/null
+  for _ in $(seq 1 30); do
+    if docker compose exec -T postgres pg_isready -U "$E2E_PG_USER" -d postgres >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
 
-docker compose exec -T postgres psql -U ifter -d postgres -v ON_ERROR_STOP=1 \
-  -c "DROP DATABASE IF EXISTS \"${E2E_DB}\" WITH (FORCE);" \
-  -c "CREATE DATABASE \"${E2E_DB}\";" >/dev/null
+  docker compose exec -T postgres psql -U "$E2E_PG_USER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "DROP DATABASE IF EXISTS \"${E2E_DB}\" WITH (FORCE);" \
+    -c "CREATE DATABASE \"${E2E_DB}\";" >/dev/null
+fi
 
 if command -v migrate >/dev/null 2>&1; then
   migrate -path db/migrations -database "$DATABASE_URL" up
@@ -52,10 +72,10 @@ go build -trimpath -o "$API_BIN" ./cmd/api
 IFTER_APP_ENV=development \
 IFTER_HTTP_HOST=127.0.0.1 \
 IFTER_HTTP_PORT="$E2E_PORT" \
-IFTER_DB_HOST=localhost \
-IFTER_DB_PORT=5432 \
-IFTER_DB_USER=ifter \
-IFTER_DB_PASSWORD=ifter \
+IFTER_DB_HOST="$E2E_PG_HOST" \
+IFTER_DB_PORT="$E2E_PG_PORT" \
+IFTER_DB_USER="$E2E_PG_USER" \
+IFTER_DB_PASSWORD="$E2E_PG_PASSWORD" \
 IFTER_DB_NAME="$E2E_DB" \
 IFTER_DB_SSLMODE=disable \
 IFTER_LOG_LEVEL=warn \
