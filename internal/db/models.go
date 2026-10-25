@@ -245,6 +245,13 @@ type ImportRowError struct {
 	Message     string      `json:"message"`
 }
 
+type ParentStudent struct {
+	UserID       pgtype.UUID        `json:"user_id"`
+	StudentID    pgtype.UUID        `json:"student_id"`
+	Relationship pgtype.Text        `json:"relationship"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type PushSubscription struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

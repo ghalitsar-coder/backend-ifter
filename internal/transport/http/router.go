@@ -43,6 +43,7 @@ const (
 	RoleDutyTeacher = "duty_teacher"
 	RolePrincipal   = "principal"
 	RoleStudent     = "student"
+	RoleParent      = "parent"
 )
 
 // Capability role sets. Each slice feeds middleware.RequireRoles for the matching
@@ -58,6 +59,7 @@ var (
 	rolesImports           = []string{RoleAdmin, RoleStaffTU}
 	rolesDispensationsRead = []string{RoleAdmin, RoleStaffTU, RoleTeacher, RoleDutyTeacher, RolePrincipal}
 	rolesStudent           = []string{RoleStudent}
+	rolesParent            = []string{RoleParent}
 )
 
 // RouteGroups bundles the capability-scoped Gin sub-groups built once in New().
@@ -98,6 +100,9 @@ type RouteGroups struct {
 	// My: student self-service (/my/*) — own attendance, discipline,
 	// dispensations. student only.
 	My *gin.RouterGroup
+	// Parent: guardian self-service (/parent/*) — attendance, discipline and
+	// dispensations of the children linked to the login. parent only.
+	Parent *gin.RouterGroup
 }
 
 // FeatureDeps is the forward-declared dependency bundle handed to each
@@ -204,6 +209,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 			Imports:           roleGroup(authenticated, rolesImports...),
 			DispensationsRead: roleGroup(authenticated, rolesDispensationsRead...),
 			My:                roleGroup(authenticated, rolesStudent...),
+			Parent:            roleGroup(authenticated, rolesParent...),
 		}
 
 		// Web-push is built before the discipline handler so a new violation
@@ -365,6 +371,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 		RegisterEmploymentType(v1, groups, deps)
 		RegisterCorrectionEvidence(v1, groups, deps)
 		RegisterStudentAccounts(v1, groups, deps)
+		RegisterParentPortal(v1, groups, deps)
 		RegisterDevices(v1, groups, deps)
 		RegisterNotifications(v1, groups, deps)
 	}

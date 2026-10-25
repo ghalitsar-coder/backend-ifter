@@ -20,6 +20,7 @@ sql:
       - "db/migrations/000016_student_notes.up.sql"
       - "db/migrations/000017_devices.up.sql"
       - "db/migrations/000018_push_subscriptions.up.sql"
+      - "db/migrations/000019_parent_portal.up.sql"
     queries:
       - "db/query"
     gen:

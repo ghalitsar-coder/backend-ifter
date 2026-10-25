@@ -38,16 +38,34 @@ var (
 	// ErrAccountNotLinked is the 403 a student-role login gets when no active
 	// student row is linked to it yet (students.user_id is NULL).
 	ErrAccountNotLinked = errors.New("no student record is linked to this login account")
+	// ErrChildNotLinked is the 404 a parent gets for a student id that is not
+	// linked to their account (the id is never confirmed to exist).
+	ErrChildNotLinked = errors.New("child is not linked to this login account")
+	// ErrParentRoleRequired is the 409 for linking children to a user that does
+	// not carry the parent role yet.
+	ErrParentRoleRequired = errors.New("user does not have the parent role")
 )
 
 // RoleStudent is the only role allowed on the /my/* surface; RoleAdmin and
 // RoleStaffTU own the provisioning surface (package spec).
 const (
 	RoleStudent   = "student"
+	RoleParent    = "parent"
 	RoleAdmin     = "admin"
 	RoleStaffTU   = "staff_tu"
 	studentStatus = "active"
 )
+
+// Guardian relationship values accepted on a parent_students link.
+const (
+	RelationshipFather   = "father"
+	RelationshipMother   = "mother"
+	RelationshipGuardian = "guardian"
+)
+
+// maxParentChildren bounds one PUT /users/:id/children payload; a guardian
+// account normally covers a handful of siblings.
+const maxParentChildren = 20
 
 // Field bounds mirror the users/student column domains (000002_identity,
 // 000003_master_data).
@@ -251,6 +269,50 @@ type MyDisciplineSummary struct {
 	TotalRecords  int                    `json:"total_records"`
 	Categories    []MyDisciplineCategory `json:"categories"`
 	CurrentLevel  *MyDisciplineLevel     `json:"current_level"`
+}
+
+// ParentChild is one row of /parent/children and GET /users/:id/children: the
+// linked student plus its current enrollment (null while unenrolled).
+type ParentChild struct {
+	StudentID     string    `json:"student_id"`
+	StudentNumber string    `json:"student_number"`
+	FullName      string    `json:"full_name"`
+	Status        string    `json:"status"`
+	ClassID       *string   `json:"class_id"`
+	ClassName     *string   `json:"class_name"`
+	Relationship  *string   `json:"relationship"`
+	LinkedAt      time.Time `json:"linked_at"`
+}
+
+// ParentChildList is the { "data": [...] } envelope of the parent link reads.
+type ParentChildList struct {
+	Data []ParentChild `json:"data"`
+}
+
+// ParentLinkInput is one child in the PUT /users/:id/children payload.
+type ParentLinkInput struct {
+	StudentID    string
+	Relationship string
+}
+
+// ParentDispensation is one dispensation row of the parent portal.
+type ParentDispensation struct {
+	ID        string    `json:"id"`
+	Type      string    `json:"type"`
+	Reason    string    `json:"reason"`
+	StartDate string    `json:"start_date"`
+	EndDate   *string   `json:"end_date"`
+	Status    string    `json:"status"`
+	Note      *string   `json:"note"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ParentDispensationList is the paginated { "data": [...] } envelope.
+type ParentDispensationList struct {
+	Data   []ParentDispensation `json:"data"`
+	Total  int64                `json:"total"`
+	Limit  int32                `json:"limit"`
+	Offset int32                `json:"offset"`
 }
 
 // DateRangeFilter is the shared from/to (+ pagination) filter of the /my/*

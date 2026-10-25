@@ -226,6 +226,10 @@ func (h *studentAccountHandler) writeError(c *gin.Context, err error) {
 		response.Error(c, http.StatusUnauthorized, "unauthorized", "authentication required")
 	case errors.Is(err, studentaccountspkg.ErrAccountNotLinked):
 		response.Error(c, http.StatusForbidden, "forbidden", "no active student record is linked to this login account")
+	case errors.Is(err, studentaccountspkg.ErrChildNotLinked):
+		response.Error(c, http.StatusNotFound, "not_found", "child is not linked to this login account")
+	case errors.Is(err, studentaccountspkg.ErrParentRoleRequired):
+		response.Error(c, http.StatusConflict, "conflict", "assign the parent role to this user before linking children")
 	case errors.Is(err, studentaccountspkg.ErrForbidden):
 		response.Error(c, http.StatusForbidden, "forbidden", "insufficient permissions")
 	case errors.Is(err, studentaccountspkg.ErrInvalidInput):

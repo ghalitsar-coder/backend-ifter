@@ -167,15 +167,86 @@ di-update oleh ingest tap RFID (F11).
 
 ---
 
-## F7 — Portal orang tua (belum didesain backend)
+## F7 — Portal orang tua
 
-**Status backend:** TBD (wave berikutnya). Rencana: perluas role/akun ortu dan
-tautan akun → siswa; endpoint `/parent/*` read-only untuk absensi,
-kedisiplinan, dan dispensasi anak yang tertaut.
+**Status backend:** diimplementasikan di wave ini (migration `000019_parent_portal`).
 
-Frontend nanti: layout/role `parent`, pemilih anak, halaman ringkasan
-kehadiran + pelanggaran + dispensasi. Kontrak final akan ditambahkan ke
-dokumen ini sebelum implementasi backend dimulai.
+### Kontrak backend
+
+Role baru `parent` sudah ada di tabel `roles` dan bisa diberikan lewat
+`PUT /users/:id/roles` yang sudah ada. Tautan akun ortu → siswa disimpan di
+`parent_students` (banyak anak per akun, satu anak boleh punya beberapa wali).
+
+Admin-only (role `admin`):
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| GET | `/users/:id/children` | `{ "data": [...] }` tautan milik user itu |
+| PUT | `/users/:id/children` | body `{ "children": [{ "student_id": "uuid", "relationship": "father"\|"mother"\|"guardian" }] }` (relationship opsional) → 200 `{ "data": [...] }` |
+
+`PUT` bersifat **replace-all**: seluruh tautan lama dihapus lalu diganti isi
+payload. Kirim `{"children": []}` untuk mengosongkan. Aturan:
+
+- Target user harus sudah ber-role `parent` → jika belum: 409 `conflict`
+  (`assign the parent role to this user before linking children`).
+- User atau siswa tidak dikenal → 404; UUID rusak, relationship di luar enum,
+  siswa duplikat dalam satu payload, atau lebih dari 20 anak → 400.
+- Siswa berstatus `graduated` boleh tetap tertaut (riwayat tetap terbaca).
+- Setiap perubahan dicatat di audit log `user.children.update`.
+
+Parent-only (role `parent`, akun yang tidak punya role ini → 403):
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| GET | `/parent/children` | `{ "data": [...] }` anak yang tertaut ke pemanggil |
+| GET | `/parent/children/:id/attendance?from=&to=` | sama dengan `/my/attendance` |
+| GET | `/parent/children/:id/attendance-summary?from=&to=` | sama dengan `/my/attendance-summary` |
+| GET | `/parent/children/:id/discipline?from=&to=` | sama dengan `/my/discipline` |
+| GET | `/parent/children/:id/discipline-summary?from=&to=` | sama dengan `/my/discipline-summary` |
+| GET | `/parent/children/:id/dispensations?limit=&offset=` | `{ "data": [...], "total", "limit", "offset" }` |
+
+`from`/`to` wajib (`YYYY-MM-DD`, rentang maksimal 366 hari), persis seperti
+`/my/*`. Anak yang tidak tertaut ke pemanggil **selalu 404** (bukan 403) agar
+keberadaan siswa lain tidak bisa ditebak; UUID rusak → 400.
+
+Objek `parent child`:
+
+```json
+{
+  "student_id": "uuid",
+  "student_number": "SAC-001",
+  "full_name": "Ani Berlink",
+  "status": "active",
+  "class_id": "uuid",
+  "class_name": "12A",
+  "relationship": "mother",
+  "linked_at": "2026-10-25T09:00:00Z"
+}
+```
+
+`class_id`/`class_name`/`relationship` bernilai `null` bila tidak ada
+(kelas mengikuti enrollment yang aktif hari ini; relationship opsional).
+
+### Tugas frontend
+
+1. Layout/role `parent` di navigasi, terpisah dari `student`.
+2. Halaman admin: pilih user ber-role `parent`, kelola banyak anak sekaligus
+   (multi-select + relationship) memakai `GET`/`PUT /users/:id/children`.
+3. Portal ortu: pemilih anak (dari `/parent/children`, langsung tampil bila
+   hanya satu), lalu tab Kehadiran / Kedisiplinan / Dispensasi yang memakai
+   endpoint `/parent/children/:id/*`.
+4. Filter tanggal yang sama dengan portal siswa; tampilkan nama anak dan kelas
+   dari objek child, bukan query tambahan.
+5. Tangani 409 `conflict` saat menautkan user yang belum ber-role `parent`
+   dengan pesan spesifik; 404 untuk anak tak tertaut sebagai empty state
+   "Anak tidak terhubung ke akun ini".
+
+### Kriteria terima
+
+- Akun tanpa role `parent` tidak melihat menu portal ortu dan mendapat pesan
+  jelas bila admin mencoba menautkan.
+- Satu akun ortu bisa berpindah anak tanpa reload penuh.
+- Tidak ada key locale baru.
 
 ---
 

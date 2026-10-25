@@ -43,16 +43,22 @@ func (s *Service) MyAttendance(ctx context.Context, actor Actor, filter DateRang
 	if err != nil {
 		return MyAttendanceList{}, err
 	}
+	return s.attendanceListFor(ctx, student.ID, filter)
+}
+
+// attendanceListFor is the shared history read behind /my/attendance and the
+// parent portal: the caller has already resolved and authorized studentID.
+func (s *Service) attendanceListFor(ctx context.Context, studentID pgtype.UUID, filter DateRangeFilter) (MyAttendanceList, error) {
 	from, to, err := parseDateRange(filter.From, filter.To)
 	if err != nil {
 		return MyAttendanceList{}, err
 	}
 	limit, offset := normalizePage(filter.Limit, filter.Offset)
-	rows, err := s.queries.ListAttendanceHistory(ctx, s.myAttendanceParams(student.ID, from, to, limit, offset))
+	rows, err := s.queries.ListAttendanceHistory(ctx, s.myAttendanceParams(studentID, from, to, limit, offset))
 	if err != nil {
 		return MyAttendanceList{}, fmt.Errorf("list my attendance: %w", err)
 	}
-	total, err := s.queries.CountAttendanceHistory(ctx, s.myAttendanceCountParams(student.ID, from, to))
+	total, err := s.queries.CountAttendanceHistory(ctx, s.myAttendanceCountParams(studentID, from, to))
 	if err != nil {
 		return MyAttendanceList{}, fmt.Errorf("count my attendance: %w", err)
 	}
@@ -77,6 +83,12 @@ func (s *Service) MyAttendanceSummary(ctx context.Context, actor Actor, filter D
 	if err != nil {
 		return MyAttendanceSummary{}, err
 	}
+	return s.attendanceSummaryFor(ctx, student.ID, filter)
+}
+
+// attendanceSummaryFor is the shared aggregation behind /my/attendance-summary
+// and its parent-portal child variant.
+func (s *Service) attendanceSummaryFor(ctx context.Context, studentID pgtype.UUID, filter DateRangeFilter) (MyAttendanceSummary, error) {
 	from, to, err := parseDateRange(filter.From, filter.To)
 	if err != nil {
 		return MyAttendanceSummary{}, err
@@ -84,7 +96,7 @@ func (s *Service) MyAttendanceSummary(ctx context.Context, actor Actor, filter D
 	rows, err := s.queries.ListAttendanceSummary(ctx, db.ListAttendanceSummaryParams{
 		FromDate:  from,
 		ToDate:    to,
-		StudentID: student.ID,
+		StudentID: studentID,
 		AllowAll:  true,
 	})
 	if err != nil {
@@ -132,16 +144,22 @@ func (s *Service) MyDiscipline(ctx context.Context, actor Actor, filter DateRang
 	if err != nil {
 		return MyDisciplineList{}, err
 	}
+	return s.disciplineListFor(ctx, student.ID, filter)
+}
+
+// disciplineListFor is the shared discipline read behind /my/discipline and the
+// parent portal.
+func (s *Service) disciplineListFor(ctx context.Context, studentID pgtype.UUID, filter DateRangeFilter) (MyDisciplineList, error) {
 	from, to, err := parseDateRange(filter.From, filter.To)
 	if err != nil {
 		return MyDisciplineList{}, err
 	}
 	limit, offset := normalizePage(filter.Limit, filter.Offset)
-	rows, err := s.queries.ListDisciplineRecords(ctx, s.myDisciplineParams(student.ID, from, to, limit, offset))
+	rows, err := s.queries.ListDisciplineRecords(ctx, s.myDisciplineParams(studentID, from, to, limit, offset))
 	if err != nil {
 		return MyDisciplineList{}, fmt.Errorf("list my discipline records: %w", err)
 	}
-	total, err := s.queries.CountDisciplineRecords(ctx, s.myDisciplineCountParams(student.ID, from, to))
+	total, err := s.queries.CountDisciplineRecords(ctx, s.myDisciplineCountParams(studentID, from, to))
 	if err != nil {
 		return MyDisciplineList{}, fmt.Errorf("count my discipline records: %w", err)
 	}
@@ -167,18 +185,24 @@ func (s *Service) MyDisciplineSummary(ctx context.Context, actor Actor, filter D
 	if err != nil {
 		return MyDisciplineSummary{}, err
 	}
+	return s.disciplineSummaryFor(ctx, student.ID, student.StudentNumber, student.FullName, filter)
+}
+
+// disciplineSummaryFor is the shared aggregate behind /my/discipline-summary
+// and its parent-portal child variant; number/name label the summary header.
+func (s *Service) disciplineSummaryFor(ctx context.Context, studentID pgtype.UUID, studentNumber, studentName string, filter DateRangeFilter) (MyDisciplineSummary, error) {
 	from, to, err := parseDateRange(filter.From, filter.To)
 	if err != nil {
 		return MyDisciplineSummary{}, err
 	}
-	rows, err := s.queries.ListDisciplineRecords(ctx, s.myDisciplineParams(student.ID, from, to, maxSummaryRecords, 0))
+	rows, err := s.queries.ListDisciplineRecords(ctx, s.myDisciplineParams(studentID, from, to, maxSummaryRecords, 0))
 	if err != nil {
 		return MyDisciplineSummary{}, fmt.Errorf("list my discipline summary: %w", err)
 	}
 	summary := MyDisciplineSummary{
-		StudentID:     uuidString(student.ID),
-		StudentNumber: student.StudentNumber,
-		StudentName:   student.FullName,
+		StudentID:     uuidString(studentID),
+		StudentNumber: studentNumber,
+		StudentName:   studentName,
 		Categories:    make([]MyDisciplineCategory, 0),
 	}
 	index := make(map[string]int)
