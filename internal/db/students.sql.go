@@ -106,7 +106,8 @@ VALUES (
   $8, $9
 )
 RETURNING id, student_number, national_student_number, full_name, gender, birth_date,
-          admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+          admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+          user_id
 `
 
 type CreateStudentParams struct {
@@ -147,6 +148,7 @@ func (q *Queries) CreateStudent(ctx context.Context, arg CreateStudentParams) (S
 		&i.GuardianPhone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -235,7 +237,8 @@ func (q *Queries) GetStudent(ctx context.Context, id pgtype.UUID) (GetStudentRow
 
 const getStudentForUpdate = `-- name: GetStudentForUpdate :one
 SELECT id, student_number, national_student_number, full_name, gender, birth_date,
-       admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+       admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+       user_id
 FROM students
 WHERE id = $1
 FOR UPDATE
@@ -257,6 +260,7 @@ func (q *Queries) GetStudentForUpdate(ctx context.Context, id pgtype.UUID) (Stud
 		&i.GuardianPhone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -421,7 +425,8 @@ SET student_number = $1,
     updated_at = now()
 WHERE id = $9
 RETURNING id, student_number, national_student_number, full_name, gender, birth_date,
-          admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+          admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+          user_id
 `
 
 type UpdateStudentParams struct {
@@ -462,6 +467,7 @@ func (q *Queries) UpdateStudent(ctx context.Context, arg UpdateStudentParams) (S
 		&i.GuardianPhone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -471,7 +477,8 @@ UPDATE students
 SET status = $1, updated_at = now()
 WHERE id = $2
 RETURNING id, student_number, national_student_number, full_name, gender, birth_date,
-          admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+          admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+          user_id
 `
 
 type UpdateStudentStatusParams struct {
@@ -495,6 +502,7 @@ func (q *Queries) UpdateStudentStatus(ctx context.Context, arg UpdateStudentStat
 		&i.GuardianPhone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

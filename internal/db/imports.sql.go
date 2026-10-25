@@ -305,7 +305,8 @@ func (q *Queries) GetOpenEnrollmentForStudent(ctx context.Context, studentID pgt
 
 const getStudentByNationalStudentNumber = `-- name: GetStudentByNationalStudentNumber :one
 SELECT id, student_number, national_student_number, full_name, gender, birth_date,
-       admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+       admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+       user_id
 FROM students
 WHERE national_student_number = $1
 `
@@ -326,13 +327,15 @@ func (q *Queries) GetStudentByNationalStudentNumber(ctx context.Context, nationa
 		&i.GuardianPhone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getStudentByStudentNumber = `-- name: GetStudentByStudentNumber :one
 SELECT id, student_number, national_student_number, full_name, gender, birth_date,
-       admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+       admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+       user_id
 FROM students
 WHERE student_number = $1
 `
@@ -353,12 +356,13 @@ func (q *Queries) GetStudentByStudentNumber(ctx context.Context, studentNumber s
 		&i.GuardianPhone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getTeacherByEmployeeNumber = `-- name: GetTeacherByEmployeeNumber :one
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 FROM teachers
 WHERE employee_number = $1
 `
@@ -376,6 +380,7 @@ func (q *Queries) GetTeacherByEmployeeNumber(ctx context.Context, employeeNumber
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmploymentTypeID,
 	)
 	return i, err
 }
@@ -597,15 +602,18 @@ func (q *Queries) ListStudentsForExport(ctx context.Context, arg ListStudentsFor
 }
 
 const listTeachersForExport = `-- name: ListTeachersForExport :many
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
-FROM teachers
-WHERE ($1::text IS NULL OR status = $1)
+SELECT t.id, t.user_id, t.employee_number, t.full_name, t.email, t.phone, t.status,
+       t.employment_type_id, t.created_at, t.updated_at,
+       et.name AS employment_type_name
+FROM teachers t
+LEFT JOIN employment_types et ON et.id = t.employment_type_id
+WHERE ($1::text IS NULL OR t.status = $1)
   AND (
     $2::text IS NULL
-    OR full_name ILIKE '%' || $2::text || '%'
-    OR employee_number ILIKE '%' || $2::text || '%'
+    OR t.full_name ILIKE '%' || $2::text || '%'
+    OR t.employee_number ILIKE '%' || $2::text || '%'
   )
-ORDER BY full_name, id
+ORDER BY t.full_name, t.id
 `
 
 type ListTeachersForExportParams struct {
@@ -613,15 +621,29 @@ type ListTeachersForExportParams struct {
 	Search pgtype.Text `json:"search"`
 }
 
-func (q *Queries) ListTeachersForExport(ctx context.Context, arg ListTeachersForExportParams) ([]Teacher, error) {
+type ListTeachersForExportRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	EmployeeNumber     pgtype.Text        `json:"employee_number"`
+	FullName           string             `json:"full_name"`
+	Email              pgtype.Text        `json:"email"`
+	Phone              pgtype.Text        `json:"phone"`
+	Status             string             `json:"status"`
+	EmploymentTypeID   pgtype.UUID        `json:"employment_type_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	EmploymentTypeName pgtype.Text        `json:"employment_type_name"`
+}
+
+func (q *Queries) ListTeachersForExport(ctx context.Context, arg ListTeachersForExportParams) ([]ListTeachersForExportRow, error) {
 	rows, err := q.db.Query(ctx, listTeachersForExport, arg.Status, arg.Search)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Teacher{}
+	items := []ListTeachersForExportRow{}
 	for rows.Next() {
-		var i Teacher
+		var i ListTeachersForExportRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -630,8 +652,10 @@ func (q *Queries) ListTeachersForExport(ctx context.Context, arg ListTeachersFor
 			&i.Email,
 			&i.Phone,
 			&i.Status,
+			&i.EmploymentTypeID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EmploymentTypeName,
 		); err != nil {
 			return nil, err
 		}

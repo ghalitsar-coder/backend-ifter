@@ -30,6 +30,20 @@ type AttendanceCorrection struct {
 	Reason             string             `json:"reason"`
 	CorrectedByUserID  pgtype.UUID        `json:"corrected_by_user_id"`
 	CorrectedAt        pgtype.Timestamptz `json:"corrected_at"`
+	EvidenceHash       pgtype.Text        `json:"evidence_hash"`
+}
+
+type AttendanceCorrectionEvidence struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AttendanceRecordID pgtype.UUID        `json:"attendance_record_id"`
+	CorrectionID       pgtype.UUID        `json:"correction_id"`
+	FileName           string             `json:"file_name"`
+	ContentType        string             `json:"content_type"`
+	SizeBytes          int64              `json:"size_bytes"`
+	StoredKey          string             `json:"stored_key"`
+	UploadedBy         pgtype.UUID        `json:"uploaded_by"`
+	Note               pgtype.Text        `json:"note"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type AttendanceDayClosure struct {
@@ -127,6 +141,25 @@ type DisciplineRecord struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Dispensation struct {
+	ID                pgtype.UUID        `json:"id"`
+	StudentID         pgtype.UUID        `json:"student_id"`
+	ClassID           pgtype.UUID        `json:"class_id"`
+	Type              string             `json:"type"`
+	Reason            string             `json:"reason"`
+	StartDate         pgtype.Date        `json:"start_date"`
+	EndDate           pgtype.Date        `json:"end_date"`
+	Status            string             `json:"status"`
+	DocumentFileName  pgtype.Text        `json:"document_file_name"`
+	DocumentStoredKey pgtype.Text        `json:"document_stored_key"`
+	SubmittedBy       pgtype.UUID        `json:"submitted_by"`
+	VerifiedBy        pgtype.UUID        `json:"verified_by"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	Note              pgtype.Text        `json:"note"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DutyAssignment struct {
 	ID        pgtype.UUID        `json:"id"`
 	TeacherID pgtype.UUID        `json:"teacher_id"`
@@ -135,6 +168,28 @@ type DutyAssignment struct {
 	EndDate   pgtype.Date        `json:"end_date"`
 	CreatedBy pgtype.UUID        `json:"created_by"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type DutyRotation struct {
+	ID                  pgtype.UUID        `json:"id"`
+	DutyAssignmentID    pgtype.UUID        `json:"duty_assignment_id"`
+	SubstituteTeacherID pgtype.UUID        `json:"substitute_teacher_id"`
+	RotationDate        pgtype.Date        `json:"rotation_date"`
+	Status              string             `json:"status"`
+	Reason              string             `json:"reason"`
+	CreatedBy           pgtype.UUID        `json:"created_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type EmploymentType struct {
+	ID          pgtype.UUID        `json:"id"`
+	Code        string             `json:"code"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type HomeroomAssignment struct {
@@ -193,6 +248,29 @@ type Role struct {
 	Description pgtype.Text `json:"description"`
 }
 
+type SanctionRule struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	MinPoints   int16              `json:"min_points"`
+	MaxPoints   pgtype.Int2        `json:"max_points"`
+	Action      string             `json:"action"`
+	Level       pgtype.Text        `json:"level"`
+	Description pgtype.Text        `json:"description"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SchoolGeofence struct {
+	ID           int16              `json:"id"`
+	Latitude     float64            `json:"latitude"`
+	Longitude    float64            `json:"longitude"`
+	RadiusMeters int32              `json:"radius_meters"`
+	IsEnabled    bool               `json:"is_enabled"`
+	UpdatedBy    pgtype.UUID        `json:"updated_by"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type SchoolHoliday struct {
 	HolidayDate pgtype.Date        `json:"holiday_date"`
 	Name        string             `json:"name"`
@@ -228,18 +306,41 @@ type Student struct {
 	GuardianPhone         pgtype.Text        `json:"guardian_phone"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	UserID                pgtype.UUID        `json:"user_id"`
 }
 
 type Teacher struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	EmployeeNumber pgtype.Text        `json:"employee_number"`
-	FullName       string             `json:"full_name"`
-	Email          pgtype.Text        `json:"email"`
-	Phone          pgtype.Text        `json:"phone"`
-	Status         string             `json:"status"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	EmployeeNumber   pgtype.Text        `json:"employee_number"`
+	FullName         string             `json:"full_name"`
+	Email            pgtype.Text        `json:"email"`
+	Phone            pgtype.Text        `json:"phone"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	EmploymentTypeID pgtype.UUID        `json:"employment_type_id"`
+}
+
+type TeacherPresence struct {
+	ID                     pgtype.UUID        `json:"id"`
+	TeacherID              pgtype.UUID        `json:"teacher_id"`
+	PresenceDate           pgtype.Date        `json:"presence_date"`
+	CheckInAt              pgtype.Timestamptz `json:"check_in_at"`
+	CheckOutAt             pgtype.Timestamptz `json:"check_out_at"`
+	CheckInLatitude        float64            `json:"check_in_latitude"`
+	CheckInLongitude       float64            `json:"check_in_longitude"`
+	CheckInAccuracyMeters  float64            `json:"check_in_accuracy_meters"`
+	CheckInWithinGeofence  bool               `json:"check_in_within_geofence"`
+	CheckInDistanceMeters  float64            `json:"check_in_distance_meters"`
+	CheckOutLatitude       pgtype.Float8      `json:"check_out_latitude"`
+	CheckOutLongitude      pgtype.Float8      `json:"check_out_longitude"`
+	CheckOutAccuracyMeters pgtype.Float8      `json:"check_out_accuracy_meters"`
+	CheckOutWithinGeofence pgtype.Bool        `json:"check_out_within_geofence"`
+	CheckOutDistanceMeters pgtype.Float8      `json:"check_out_distance_meters"`
+	Notes                  pgtype.Text        `json:"notes"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Term struct {
@@ -249,6 +350,16 @@ type Term struct {
 	Name           string      `json:"name"`
 	StartDate      pgtype.Date `json:"start_date"`
 	EndDate        pgtype.Date `json:"end_date"`
+}
+
+type UniformReport struct {
+	ID              pgtype.UUID        `json:"id"`
+	ForDate         pgtype.Date        `json:"for_date"`
+	TeacherID       pgtype.UUID        `json:"teacher_id"`
+	Scope           string             `json:"scope"`
+	TargetStudentID pgtype.UUID        `json:"target_student_id"`
+	Note            pgtype.Text        `json:"note"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {

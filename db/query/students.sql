@@ -68,7 +68,8 @@ WHERE s.id = sqlc.arg(id);
 
 -- name: GetStudentForUpdate :one
 SELECT id, student_number, national_student_number, full_name, gender, birth_date,
-       admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+       admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+       user_id
 FROM students
 WHERE id = sqlc.arg(id)
 FOR UPDATE;
@@ -84,7 +85,8 @@ VALUES (
   sqlc.narg(guardian_name), sqlc.narg(guardian_phone)
 )
 RETURNING id, student_number, national_student_number, full_name, gender, birth_date,
-          admission_year, status, guardian_name, guardian_phone, created_at, updated_at;
+          admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+          user_id;
 
 -- name: UpdateStudent :one
 UPDATE students
@@ -99,14 +101,16 @@ SET student_number = sqlc.arg(student_number),
     updated_at = now()
 WHERE id = sqlc.arg(id)
 RETURNING id, student_number, national_student_number, full_name, gender, birth_date,
-          admission_year, status, guardian_name, guardian_phone, created_at, updated_at;
+          admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+          user_id;
 
 -- name: UpdateStudentStatus :one
 UPDATE students
 SET status = sqlc.arg(status), updated_at = now()
 WHERE id = sqlc.arg(id)
 RETURNING id, student_number, national_student_number, full_name, gender, birth_date,
-          admission_year, status, guardian_name, guardian_phone, created_at, updated_at;
+          admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+          user_id;
 
 -- name: GetOpenEnrollmentForStudentForUpdate :one
 SELECT id, student_id, class_id, start_date, end_date, created_by, created_at

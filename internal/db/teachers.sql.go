@@ -35,21 +35,22 @@ func (q *Queries) CountTeachers(ctx context.Context, arg CountTeachersParams) (i
 }
 
 const createTeacher = `-- name: CreateTeacher :one
-INSERT INTO teachers (user_id, employee_number, full_name, email, phone, status)
+INSERT INTO teachers (user_id, employee_number, full_name, email, phone, status, employment_type_id)
 VALUES (
   $1, $2, $3,
-  $4, $5, $6
+  $4, $5, $6, $7
 )
-RETURNING id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+RETURNING id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 `
 
 type CreateTeacherParams struct {
-	UserID         pgtype.UUID `json:"user_id"`
-	EmployeeNumber pgtype.Text `json:"employee_number"`
-	FullName       string      `json:"full_name"`
-	Email          pgtype.Text `json:"email"`
-	Phone          pgtype.Text `json:"phone"`
-	Status         string      `json:"status"`
+	UserID           pgtype.UUID `json:"user_id"`
+	EmployeeNumber   pgtype.Text `json:"employee_number"`
+	FullName         string      `json:"full_name"`
+	Email            pgtype.Text `json:"email"`
+	Phone            pgtype.Text `json:"phone"`
+	Status           string      `json:"status"`
+	EmploymentTypeID pgtype.UUID `json:"employment_type_id"`
 }
 
 func (q *Queries) CreateTeacher(ctx context.Context, arg CreateTeacherParams) (Teacher, error) {
@@ -60,6 +61,7 @@ func (q *Queries) CreateTeacher(ctx context.Context, arg CreateTeacherParams) (T
 		arg.Email,
 		arg.Phone,
 		arg.Status,
+		arg.EmploymentTypeID,
 	)
 	var i Teacher
 	err := row.Scan(
@@ -72,12 +74,13 @@ func (q *Queries) CreateTeacher(ctx context.Context, arg CreateTeacherParams) (T
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmploymentTypeID,
 	)
 	return i, err
 }
 
 const getTeacher = `-- name: GetTeacher :one
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 FROM teachers
 WHERE id = $1
 `
@@ -95,12 +98,13 @@ func (q *Queries) GetTeacher(ctx context.Context, id pgtype.UUID) (Teacher, erro
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmploymentTypeID,
 	)
 	return i, err
 }
 
 const getTeacherForUpdate = `-- name: GetTeacherForUpdate :one
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 FROM teachers
 WHERE id = $1
 FOR UPDATE
@@ -119,12 +123,13 @@ func (q *Queries) GetTeacherForUpdate(ctx context.Context, id pgtype.UUID) (Teac
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmploymentTypeID,
 	)
 	return i, err
 }
 
 const listTeachers = `-- name: ListTeachers :many
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 FROM teachers
 WHERE ($1::text IS NULL OR status = $1)
   AND (
@@ -167,6 +172,7 @@ func (q *Queries) ListTeachers(ctx context.Context, arg ListTeachersParams) ([]T
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EmploymentTypeID,
 		); err != nil {
 			return nil, err
 		}
@@ -185,18 +191,20 @@ SET user_id = $1,
     full_name = $3,
     email = $4,
     phone = $5,
+    employment_type_id = $6,
     updated_at = now()
-WHERE id = $6
-RETURNING id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+WHERE id = $7
+RETURNING id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 `
 
 type UpdateTeacherParams struct {
-	UserID         pgtype.UUID `json:"user_id"`
-	EmployeeNumber pgtype.Text `json:"employee_number"`
-	FullName       string      `json:"full_name"`
-	Email          pgtype.Text `json:"email"`
-	Phone          pgtype.Text `json:"phone"`
-	ID             pgtype.UUID `json:"id"`
+	UserID           pgtype.UUID `json:"user_id"`
+	EmployeeNumber   pgtype.Text `json:"employee_number"`
+	FullName         string      `json:"full_name"`
+	Email            pgtype.Text `json:"email"`
+	Phone            pgtype.Text `json:"phone"`
+	EmploymentTypeID pgtype.UUID `json:"employment_type_id"`
+	ID               pgtype.UUID `json:"id"`
 }
 
 func (q *Queries) UpdateTeacher(ctx context.Context, arg UpdateTeacherParams) (Teacher, error) {
@@ -206,6 +214,7 @@ func (q *Queries) UpdateTeacher(ctx context.Context, arg UpdateTeacherParams) (T
 		arg.FullName,
 		arg.Email,
 		arg.Phone,
+		arg.EmploymentTypeID,
 		arg.ID,
 	)
 	var i Teacher
@@ -219,6 +228,7 @@ func (q *Queries) UpdateTeacher(ctx context.Context, arg UpdateTeacherParams) (T
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmploymentTypeID,
 	)
 	return i, err
 }
@@ -227,7 +237,7 @@ const updateTeacherStatus = `-- name: UpdateTeacherStatus :one
 UPDATE teachers
 SET status = $1, updated_at = now()
 WHERE id = $2
-RETURNING id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+RETURNING id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 `
 
 type UpdateTeacherStatusParams struct {
@@ -248,6 +258,7 @@ func (q *Queries) UpdateTeacherStatus(ctx context.Context, arg UpdateTeacherStat
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmploymentTypeID,
 	)
 	return i, err
 }

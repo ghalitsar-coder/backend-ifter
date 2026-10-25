@@ -1,17 +1,19 @@
 -- name: GetStudentByStudentNumber :one
 SELECT id, student_number, national_student_number, full_name, gender, birth_date,
-       admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+       admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+       user_id
 FROM students
 WHERE student_number = sqlc.arg(student_number);
 
 -- name: GetStudentByNationalStudentNumber :one
 SELECT id, student_number, national_student_number, full_name, gender, birth_date,
-       admission_year, status, guardian_name, guardian_phone, created_at, updated_at
+       admission_year, status, guardian_name, guardian_phone, created_at, updated_at,
+       user_id
 FROM students
 WHERE national_student_number = sqlc.arg(national_student_number);
 
 -- name: GetTeacherByEmployeeNumber :one
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 FROM teachers
 WHERE employee_number = sqlc.arg(employee_number);
 
@@ -137,15 +139,18 @@ WHERE (sqlc.narg(status)::text IS NULL OR s.status = sqlc.narg(status))
 ORDER BY s.full_name, s.id;
 
 -- name: ListTeachersForExport :many
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
-FROM teachers
-WHERE (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status))
+SELECT t.id, t.user_id, t.employee_number, t.full_name, t.email, t.phone, t.status,
+       t.employment_type_id, t.created_at, t.updated_at,
+       et.name AS employment_type_name
+FROM teachers t
+LEFT JOIN employment_types et ON et.id = t.employment_type_id
+WHERE (sqlc.narg(status)::text IS NULL OR t.status = sqlc.narg(status))
   AND (
     sqlc.narg(search)::text IS NULL
-    OR full_name ILIKE '%' || sqlc.narg(search)::text || '%'
-    OR employee_number ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR t.full_name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR t.employee_number ILIKE '%' || sqlc.narg(search)::text || '%'
   )
-ORDER BY full_name, id;
+ORDER BY t.full_name, t.id;
 
 -- name: ListImportJobsForFileCleanup :many
 SELECT id, file_storage_key

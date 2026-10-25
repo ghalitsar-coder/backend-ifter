@@ -103,16 +103,17 @@ func (q *Queries) CreateAttendanceClosure(ctx context.Context, arg CreateAttenda
 const createAttendanceCorrection = `-- name: CreateAttendanceCorrection :one
 INSERT INTO attendance_corrections (
   attendance_record_id, old_status, new_status, old_check_in_at, new_check_in_at,
-  old_notes, new_notes, reason, corrected_by_user_id
+  old_notes, new_notes, reason, corrected_by_user_id, evidence_hash, corrected_at
 )
 VALUES (
   $1, $2, $3,
   $4, $5,
   $6, $7, $8,
-  $9
+  $9, $10, $11
 )
 RETURNING id, attendance_record_id, old_status, new_status, old_check_in_at,
-          new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id, corrected_at
+          new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id,
+          corrected_at, evidence_hash
 `
 
 type CreateAttendanceCorrectionParams struct {
@@ -125,8 +126,14 @@ type CreateAttendanceCorrectionParams struct {
 	NewNotes           pgtype.Text        `json:"new_notes"`
 	Reason             string             `json:"reason"`
 	CorrectedByUserID  pgtype.UUID        `json:"corrected_by_user_id"`
+	EvidenceHash       pgtype.Text        `json:"evidence_hash"`
+	CorrectedAt        pgtype.Timestamptz `json:"corrected_at"`
 }
 
+// evidence_hash + corrected_at are computed server-side by the
+// correction-evidence package (canonical sha256, docs/API_ADDENDUM.md §6.6);
+// corrected_at is passed explicitly so the hash and the stored row cover the
+// exact same instant.
 func (q *Queries) CreateAttendanceCorrection(ctx context.Context, arg CreateAttendanceCorrectionParams) (AttendanceCorrection, error) {
 	row := q.db.QueryRow(ctx, createAttendanceCorrection,
 		arg.AttendanceRecordID,
@@ -138,6 +145,8 @@ func (q *Queries) CreateAttendanceCorrection(ctx context.Context, arg CreateAtte
 		arg.NewNotes,
 		arg.Reason,
 		arg.CorrectedByUserID,
+		arg.EvidenceHash,
+		arg.CorrectedAt,
 	)
 	var i AttendanceCorrection
 	err := row.Scan(
@@ -152,6 +161,7 @@ func (q *Queries) CreateAttendanceCorrection(ctx context.Context, arg CreateAtte
 		&i.Reason,
 		&i.CorrectedByUserID,
 		&i.CorrectedAt,
+		&i.EvidenceHash,
 	)
 	return i, err
 }
@@ -468,7 +478,7 @@ func (q *Queries) GetSystemUserID(ctx context.Context) (pgtype.UUID, error) {
 }
 
 const getTeacherByUserID = `-- name: GetTeacherByUserID :one
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 FROM teachers
 WHERE user_id = $1
 `
@@ -486,6 +496,7 @@ func (q *Queries) GetTeacherByUserID(ctx context.Context, userID pgtype.UUID) (T
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmploymentTypeID,
 	)
 	return i, err
 }
@@ -537,7 +548,8 @@ func (q *Queries) HasHomeroomAssignmentForDate(ctx context.Context, arg HasHomer
 
 const listAttendanceCorrections = `-- name: ListAttendanceCorrections :many
 SELECT id, attendance_record_id, old_status, new_status, old_check_in_at,
-       new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id, corrected_at
+       new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id,
+       corrected_at, evidence_hash
 FROM attendance_corrections
 WHERE attendance_record_id = $1
 ORDER BY corrected_at DESC, id
@@ -564,6 +576,7 @@ func (q *Queries) ListAttendanceCorrections(ctx context.Context, attendanceRecor
 			&i.Reason,
 			&i.CorrectedByUserID,
 			&i.CorrectedAt,
+			&i.EvidenceHash,
 		); err != nil {
 			return nil, err
 		}

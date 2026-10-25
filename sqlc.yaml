@@ -10,6 +10,13 @@ sql:
       - "db/migrations/000004_imports.up.sql"
       - "db/migrations/000005_attendance.up.sql"
       - "db/migrations/000006_discipline.up.sql"
+      - "db/migrations/000009_teacher_presence.up.sql"
+      - "db/migrations/000010_dispensations.up.sql"
+      - "db/migrations/000011_duty_rotation.up.sql"
+      - "db/migrations/000012_sanction_rules.up.sql"
+      - "db/migrations/000013_employment_type.up.sql"
+      - "db/migrations/000014_correction_evidence.up.sql"
+      - "db/migrations/000015_student_accounts.up.sql"
     queries:
       - "db/query"
     gen:

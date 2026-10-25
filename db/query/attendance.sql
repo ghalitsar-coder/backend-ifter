@@ -60,7 +60,7 @@ LEFT JOIN school_schedules ss
 WHERE c.id = sqlc.arg(class_id);
 
 -- name: GetTeacherByUserID :one
-SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at
+SELECT id, user_id, employee_number, full_name, email, phone, status, created_at, updated_at, employment_type_id
 FROM teachers
 WHERE user_id = sqlc.arg(user_id);
 
@@ -176,18 +176,23 @@ JOIN students s ON s.id = ar.student_id
 WHERE ar.id = sqlc.arg(id);
 
 -- name: CreateAttendanceCorrection :one
+-- evidence_hash + corrected_at are computed server-side by the
+-- correction-evidence package (canonical sha256, docs/API_ADDENDUM.md §6.6);
+-- corrected_at is passed explicitly so the hash and the stored row cover the
+-- exact same instant.
 INSERT INTO attendance_corrections (
   attendance_record_id, old_status, new_status, old_check_in_at, new_check_in_at,
-  old_notes, new_notes, reason, corrected_by_user_id
+  old_notes, new_notes, reason, corrected_by_user_id, evidence_hash, corrected_at
 )
 VALUES (
   sqlc.arg(attendance_record_id), sqlc.arg(old_status), sqlc.arg(new_status),
   sqlc.narg(old_check_in_at), sqlc.narg(new_check_in_at),
   sqlc.narg(old_notes), sqlc.narg(new_notes), sqlc.arg(reason),
-  sqlc.arg(corrected_by_user_id)
+  sqlc.arg(corrected_by_user_id), sqlc.narg(evidence_hash), sqlc.arg(corrected_at)
 )
 RETURNING id, attendance_record_id, old_status, new_status, old_check_in_at,
-          new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id, corrected_at;
+          new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id,
+          corrected_at, evidence_hash;
 
 -- name: UpdateAttendanceRecord :one
 UPDATE attendance_records
@@ -202,7 +207,8 @@ RETURNING id, student_id, enrollment_id, attendance_date, status, check_in_at, n
 
 -- name: ListAttendanceCorrections :many
 SELECT id, attendance_record_id, old_status, new_status, old_check_in_at,
-       new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id, corrected_at
+       new_check_in_at, old_notes, new_notes, reason, corrected_by_user_id,
+       corrected_at, evidence_hash
 FROM attendance_corrections
 WHERE attendance_record_id = sqlc.arg(attendance_record_id)
 ORDER BY corrected_at DESC, id;
