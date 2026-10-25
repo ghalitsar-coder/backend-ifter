@@ -309,6 +309,14 @@ type Student struct {
 	UserID                pgtype.UUID        `json:"user_id"`
 }
 
+type StudentNote struct {
+	ID        pgtype.UUID        `json:"id"`
+	StudentID pgtype.UUID        `json:"student_id"`
+	Note      string             `json:"note"`
+	CreatedBy pgtype.UUID        `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Teacher struct {
 	ID               pgtype.UUID        `json:"id"`
 	UserID           pgtype.UUID        `json:"user_id"`

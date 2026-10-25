@@ -17,6 +17,7 @@ sql:
       - "db/migrations/000013_employment_type.up.sql"
       - "db/migrations/000014_correction_evidence.up.sql"
       - "db/migrations/000015_student_accounts.up.sql"
+      - "db/migrations/000016_student_notes.up.sql"
     queries:
       - "db/query"
     gen:
