@@ -25,7 +25,7 @@ func TestMigrationsAndCoreConstraints(t *testing.T) {
 	applyMigrations(t, pool, "up")
 
 	t.Run("seed data", func(t *testing.T) {
-		assertCount(t, pool, "SELECT count(*) FROM roles", 6)
+		assertCount(t, pool, "SELECT count(*) FROM roles", 7)
 		assertCount(t, pool, "SELECT count(*) FROM school_schedules", 5)
 
 		var system bool

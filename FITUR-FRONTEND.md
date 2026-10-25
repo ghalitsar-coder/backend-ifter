@@ -250,13 +250,194 @@ Objek `parent child`:
 
 ---
 
-## F8 — Absensi per mata pelajaran (belum didesain backend)
+## F8 — Absensi per mata pelajaran
 
-**Status backend:** TBD. PRD hanya memberi petunjuk `attendance_sessions`.
-Perlu tabel mata pelajaran, penugasan mengajar, sesi per JP, dan rekap.
+**Status backend:** diimplementasikan di wave ini (migration `000020_subject_attendance`).
+Absensi harian (`/attendance/*`) tidak berubah dan tetap menjadi sumber utama
+kehadiran sekolah; F8 menambah presensi per pertemuan pelajaran.
 
-Frontend nanti: layar input absensi per sesi, rekap per mapel, dan filter di
-laporan. Kontrak final menyusul.
+### Kontrak backend
+
+Katalog mapel dan penugasan mengajar (master data):
+
+| Method | Path | Role | Keterangan |
+|--------|------|------|------------|
+| GET | `/subjects?search=&is_active=` | semua staff | `{ "data": [...] }` |
+| GET | `/subjects/:id` | semua staff | `{ "subject": {...} }` |
+| POST | `/subjects` | admin + staff_tu | body `{ code, name, description?, is_active? }` → 201 |
+| PUT | `/subjects/:id` | admin + staff_tu | `is_active` yang dihilangkan berarti nilai lama dipertahankan |
+| GET | `/teaching-assignments?teacher_id=&subject_id=&class_id=&is_active=` | semua staff | `{ "data": [...] }`; guru biasa hanya melihat penugasan miliknya |
+| GET | `/teaching-assignments/:id` | semua staff | `{ "assignment": {...} }`; penugasan guru lain → 403 |
+| POST | `/teaching-assignments` | admin + staff_tu | body `{ teacher_id, subject_id, class_id, is_active? }` → 201 |
+| PUT | `/teaching-assignments/:id` | admin + staff_tu | triple duplikat → 409 |
+
+Sesi pelajaran dan presensi:
+
+| Method | Path | Role | Keterangan |
+|--------|------|------|------------|
+| POST | `/attendance-sessions` | admin + teacher + duty_teacher | body `{ teaching_assignment_id, session_date, period_start, period_end, topic?, notes? }` → 201 `{ "session": {...} }` |
+| GET | `/attendance-sessions?from=&to=&class_id=&subject_id=&teacher_id=&status=&limit=&offset=` | admin + teacher + duty_teacher + principal | `{ "data": [...], "total", "limit", "offset" }` |
+| GET | `/attendance-sessions/:id` | sama | `{ "session": {...} }` |
+| GET | `/attendance-sessions/:id/roster` | sama | `{ "data": [roster row] }` siswa terdaftar di kelas saat tanggal sesi |
+| GET | `/attendance-sessions/:id/records` | sama | `{ "data": [record] }` record yang sudah tersimpan |
+| PUT | `/attendance-sessions/:id/records` | admin + teacher + duty_teacher | body `{ "records": [{ student_id, status, note? }] }` → `{ "data": [...] }` (upsert) |
+| POST | `/attendance-sessions/:id/close` | admin + teacher + duty_teacher | → 200 `{ "session": {...} }`; sesi tertutup permanen |
+| GET | `/reports/subject-attendance?from=&to=&class_id=&subject_id=&teacher_id=` | semua staff | `{ "from", "to", "data": [...], "totals": {...} }` |
+
+Aturan:
+
+- `from`/`to` wajib untuk list sesi dan rekap (`YYYY-MM-DD`, maksimal 366
+  hari) → 400 bila hilang/rusak.
+- Guru biasa (role `teacher` tanpa role lain) hanya bisa membuat/membaca sesi
+  dan penugasan miliknya; `admin` dan `duty_teacher` melihat seluruh sekolah;
+  `principal`/`staff_tu` hanya baca dan melihat seluruh sekolah. Sesi guru
+  lain → 403. `staff_tu` tidak termasuk pembaca sesi (403 di endpoint sesi).
+- `period_start`/`period_end` adalah nomor JP 1..20, `end >= start`; `topic`
+  ≤200, `notes` ≤2000, `note` per record ≤500, maksimal 200 record per save.
+- Kombinasi `(teaching_assignment, session_date, period_start)` unik → 409.
+  Penugasan nonaktif tidak bisa dibuka sesi baru → 400.
+- Simpan record hanya untuk siswa yang ada di roster sesi itu; siswa lain,
+  status di luar enum, atau siswa duplikat → 400.
+- Sesi yang sudah `closed` menolak simpan record **dan** penutupan ulang
+  dengan 409; server juga menolak lewat trigger DB.
+- Status record: `present`, `late`, `sick`, `excused`, `absent`.
+- Audit log: `subject.create`, `subject.update`, `teaching_assignment.create`,
+  `teaching_assignment.update`, `attendance_session.create`,
+  `attendance_session.records`, `attendance_session.close`.
+
+Objek `subject`:
+
+```json
+{
+  "id": "uuid",
+  "code": "MTK",
+  "name": "Matematika",
+  "description": "Wajib",
+  "is_active": true,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Objek `assignment`:
+
+```json
+{
+  "id": "uuid",
+  "teacher_id": "uuid",
+  "teacher_name": "Budi Guru",
+  "subject_id": "uuid",
+  "subject_code": "MTK",
+  "subject_name": "Matematika",
+  "class_id": "uuid",
+  "class_name": "12A",
+  "is_active": true,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Objek `session` (konteks penugasan sudah didenormalisasi):
+
+```json
+{
+  "id": "uuid",
+  "teaching_assignment_id": "uuid",
+  "session_date": "2026-09-10",
+  "period_start": 1,
+  "period_end": 2,
+  "topic": "Persamaan kuadrat",
+  "notes": null,
+  "status": "open",
+  "teacher_id": "uuid",
+  "teacher_name": "Budi Guru",
+  "subject_id": "uuid",
+  "subject_code": "MTK",
+  "subject_name": "Matematika",
+  "class_id": "uuid",
+  "class_name": "12A",
+  "closed_at": null,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Roster row dan record:
+
+```json
+{
+  "student_id": "uuid",
+  "student_number": "SA-001",
+  "full_name": "Ani Siswa",
+  "enrollment_id": "uuid",
+  "status": "present",
+  "note": null
+}
+```
+
+`status`/`note` bernilai `null` di roster selama sesi belum diisi. Record
+menambahkan `id`, `session_id`, dan `updated_at`.
+
+Rekap per penugasan (satu baris per penugasan yang punya sesi di rentang itu):
+
+```json
+{
+  "teaching_assignment_id": "uuid",
+  "class_id": "uuid",
+  "class_name": "12A",
+  "subject_id": "uuid",
+  "subject_code": "MTK",
+  "subject_name": "Matematika",
+  "teacher_id": "uuid",
+  "teacher_name": "Budi Guru",
+  "sessions": 1,
+  "records": 3,
+  "present": 2,
+  "late": 1,
+  "sick": 0,
+  "excused": 0,
+  "absent": 0,
+  "attendance_percentage": 100
+}
+```
+
+`totals` memakai field yang sama tanpa identitas penugasan.
+`attendance_percentage = (present + late) / records * 100` (2 desimal),
+konsisten dengan laporan absensi harian.
+
+### Tugas frontend
+
+1. Halaman master data (admin + staff_tu): tab **Mata Pelajaran** (list,
+   tambah/ubah, aktif/nonaktif) dan **Penugasan Mengajar** (guru × mapel ×
+   kelas). Tampilkan pesan 409 spesifik untuk kode mapel atau triple penugasan
+   duplikat.
+2. Halaman **Presensi Mapel** untuk guru/duty/admin: filter tanggal + kelas +
+   mapel + status, daftar sesi (`GET /attendance-sessions`), tombol buat sesi
+   (pilih penugasan aktif, tanggal, JP awal–akhir, topik/catatan). Guru biasa
+   hanya memilih penugasan miliknya; penugasan nonaktif tidak ditawarkan.
+3. Detail sesi: roster dari `/roster`, pilih status per siswa (default
+   `present` di UI boleh, tetapi server tetap menolak siswa di luar roster),
+   simpan semua lewat `PUT .../records`, lalu tombol **Tutup Sesi** dengan
+   konfirmasi. Setelah `status=closed`, nonaktifkan input dan tampilkan
+   `closed_at`.
+4. Tangani 409 dengan pesan berbeda: sesi duplikat ("Sesi untuk JP awal itu
+   sudah ada") vs sesi tertutup ("Sesi sudah ditutup dan tidak bisa diubah").
+5. Halaman **Rekap Mapel** memakai `/reports/subject-attendance`: tabel per
+   kelas/mapel/guru + baris total, filter rentang tanggal/kelas/mapel/guru.
+   Tampilkan `attendance_percentage` dengan dua desimal.
+6. Semua label domain hard-coded bahasa Indonesia (tidak menambah key locale
+   baru). Gating role di UI kosmetik; server tetap otoritatif.
+
+### Kriteria terima
+
+- Guru A tidak melihat penugasan/sesi guru B, dan membuka detail sesi guru B
+  menampilkan state "tidak punya akses", bukan data.
+- Input sesi tertutup nonaktif setelah reload; percobaan simpan tetap
+  ditolak dengan pesan 409 yang spesifik.
+- Sesi duplikat (penugasan + tanggal + JP awal sama) menampilkan pesan
+  konflik spesifik.
+- Rekap menampilkan total dan persentase yang sama dengan formula di atas.
+- Tidak ada key locale baru.
 
 ---
 

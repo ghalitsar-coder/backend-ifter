@@ -71,6 +71,35 @@ type AttendanceRecord struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AttendanceSession struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TeachingAssignmentID pgtype.UUID        `json:"teaching_assignment_id"`
+	SessionDate          pgtype.Date        `json:"session_date"`
+	PeriodStart          int16              `json:"period_start"`
+	PeriodEnd            int16              `json:"period_end"`
+	Topic                pgtype.Text        `json:"topic"`
+	Notes                pgtype.Text        `json:"notes"`
+	Status               string             `json:"status"`
+	CreatedBy            pgtype.UUID        `json:"created_by"`
+	ClosedBy             pgtype.UUID        `json:"closed_by"`
+	ClosedAt             pgtype.Timestamptz `json:"closed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AttendanceSessionRecord struct {
+	ID           pgtype.UUID        `json:"id"`
+	SessionID    pgtype.UUID        `json:"session_id"`
+	StudentID    pgtype.UUID        `json:"student_id"`
+	EnrollmentID pgtype.UUID        `json:"enrollment_id"`
+	Status       string             `json:"status"`
+	Note         pgtype.Text        `json:"note"`
+	RecordedBy   pgtype.UUID        `json:"recorded_by"`
+	UpdatedBy    pgtype.UUID        `json:"updated_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AuditLog struct {
 	ID          pgtype.UUID        `json:"id"`
 	ActorUserID pgtype.UUID        `json:"actor_user_id"`
@@ -348,6 +377,16 @@ type StudentNote struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Subject struct {
+	ID          pgtype.UUID        `json:"id"`
+	Code        string             `json:"code"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Teacher struct {
 	ID               pgtype.UUID        `json:"id"`
 	UserID           pgtype.UUID        `json:"user_id"`
@@ -380,6 +419,17 @@ type TeacherPresence struct {
 	Notes                  pgtype.Text        `json:"notes"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TeachingAssignment struct {
+	ID        pgtype.UUID        `json:"id"`
+	TeacherID pgtype.UUID        `json:"teacher_id"`
+	SubjectID pgtype.UUID        `json:"subject_id"`
+	ClassID   pgtype.UUID        `json:"class_id"`
+	IsActive  bool               `json:"is_active"`
+	CreatedBy pgtype.UUID        `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Term struct {

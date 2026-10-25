@@ -24,6 +24,7 @@ import (
 	reporting "github.com/ghalitsar-coder/backend-ifter/internal/reporting"
 	sanctionrulespkg "github.com/ghalitsar-coder/backend-ifter/internal/sanctionrules"
 	studentaccountspkg "github.com/ghalitsar-coder/backend-ifter/internal/studentaccounts"
+	subjectattendancepkg "github.com/ghalitsar-coder/backend-ifter/internal/subjectattendance"
 	teacherpresencepkg "github.com/ghalitsar-coder/backend-ifter/internal/teacherpresence"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/response"
@@ -121,6 +122,7 @@ type FeatureDeps struct {
 	EmploymentType     *employmenttypepkg.Service
 	CorrectionEvidence *correctionevidencepkg.Service
 	StudentAccounts    *studentaccountspkg.Service
+	SubjectAttendance  *subjectattendancepkg.Service
 	Devices            *devicespkg.Service
 	Notifications      *notificationspkg.Service
 }
@@ -362,6 +364,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 			deps.EmploymentType = employmenttypepkg.NewService(pool, log)
 			deps.CorrectionEvidence = correctionevidencepkg.NewService(pool, log, correctionCfg)
 			deps.StudentAccounts = studentaccountspkg.NewService(pool, authAccountProvisioner{service: authService}, log)
+			deps.SubjectAttendance = subjectattendancepkg.NewService(pool, log)
 			deps.Devices = devicespkg.NewService(pool, log)
 		}
 		RegisterTeacherPresence(v1, groups, deps)
@@ -372,6 +375,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 		RegisterCorrectionEvidence(v1, groups, deps)
 		RegisterStudentAccounts(v1, groups, deps)
 		RegisterParentPortal(v1, groups, deps)
+		RegisterSubjectAttendance(v1, groups, deps)
 		RegisterDevices(v1, groups, deps)
 		RegisterNotifications(v1, groups, deps)
 	}

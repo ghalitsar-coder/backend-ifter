@@ -246,8 +246,8 @@ func TestAccountManagementAPI(t *testing.T) {
 			Data []authpkg.Role `json:"data"`
 		}
 		decode(t, rec, &roles)
-		if len(roles.Data) != 6 {
-			t.Fatalf("roles = %+v, want 6 seeded roles", roles.Data)
+		if len(roles.Data) != 7 {
+			t.Fatalf("roles = %+v, want 7 seeded roles", roles.Data)
 		}
 	})
 
