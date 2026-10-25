@@ -214,6 +214,18 @@ type StudentFilter struct {
 	SortBy  string
 }
 
+// StudentNote is one administrative note attached to a student (FR-C03).
+// Notes are append-only from the API's point of view: created once and
+// deletable, never edited in place.
+type StudentNote struct {
+	ID            string    `json:"id"`
+	StudentID     string    `json:"student_id"`
+	Note          string    `json:"note"`
+	CreatedBy     string    `json:"created_by,omitempty"`
+	CreatedByName string    `json:"created_by_name,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 type Page struct {
 	Limit  int32
 	Offset int32

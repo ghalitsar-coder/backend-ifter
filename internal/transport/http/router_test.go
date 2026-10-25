@@ -189,6 +189,8 @@ func TestRouterCapabilityEndpoints(t *testing.T) {
 		"GET /api/v1/students", "POST /api/v1/students", "GET /api/v1/students/:id",
 		"PUT /api/v1/students/:id", "PATCH /api/v1/students/:id/status",
 		"PUT /api/v1/students/:id/class",
+		"GET /api/v1/students/:id/notes", "POST /api/v1/students/:id/notes",
+		"DELETE /api/v1/students/:id/notes/:noteId",
 	}
 
 	for _, route := range expected {

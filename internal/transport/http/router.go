@@ -313,6 +313,12 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 			groups.MasterData.PUT("/students/:id", middleware.BodyLimit(64<<10), masterData.UpdateStudent)
 			groups.MasterData.PATCH("/students/:id/status", middleware.BodyLimit(64<<10), masterData.UpdateStudentStatus)
 			groups.MasterData.PUT("/students/:id/class", middleware.BodyLimit(64<<10), masterData.AssignStudentClass)
+
+			// Administrative notes (FR-C03): staff read/append/delete, never
+			// edit. Same admin + staff_tu guard as the rest of master data.
+			groups.MasterData.GET("/students/:id/notes", masterData.ListStudentNotes)
+			groups.MasterData.POST("/students/:id/notes", middleware.BodyLimit(16<<10), masterData.CreateStudentNote)
+			groups.MasterData.DELETE("/students/:id/notes/:noteId", masterData.DeleteStudentNote)
 		}
 
 		// Beyond-MVP feature scaffolds. Each Register* is a no-op today; the
