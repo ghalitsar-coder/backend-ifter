@@ -22,6 +22,7 @@ sql:
       - "db/migrations/000018_push_subscriptions.up.sql"
       - "db/migrations/000019_parent_portal.up.sql"
       - "db/migrations/000020_subject_attendance.up.sql"
+      - "db/migrations/000021_device_ingest.up.sql"
     queries:
       - "db/query"
     gen:

@@ -12,21 +12,22 @@ import (
 )
 
 const createDevice = `-- name: CreateDevice :one
-INSERT INTO devices (name, identifier, device_type, location, notes)
+INSERT INTO devices (name, identifier, device_type, location, notes, ingest_token_hash)
 VALUES (
   $1, $2, $3,
-  $4, $5
+  $4, $5, $6
 )
 RETURNING id, name, identifier, device_type, location, notes, status,
-          last_seen_at, created_at, updated_at
+          last_seen_at, created_at, updated_at, ingest_token_hash
 `
 
 type CreateDeviceParams struct {
-	Name       string      `json:"name"`
-	Identifier string      `json:"identifier"`
-	DeviceType string      `json:"device_type"`
-	Location   pgtype.Text `json:"location"`
-	Notes      pgtype.Text `json:"notes"`
+	Name            string      `json:"name"`
+	Identifier      string      `json:"identifier"`
+	DeviceType      string      `json:"device_type"`
+	Location        pgtype.Text `json:"location"`
+	Notes           pgtype.Text `json:"notes"`
+	IngestTokenHash pgtype.Text `json:"ingest_token_hash"`
 }
 
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
@@ -36,6 +37,7 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 		arg.DeviceType,
 		arg.Location,
 		arg.Notes,
+		arg.IngestTokenHash,
 	)
 	var i Device
 	err := row.Scan(
@@ -49,13 +51,14 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IngestTokenHash,
 	)
 	return i, err
 }
 
 const getDevice = `-- name: GetDevice :one
 SELECT id, name, identifier, device_type, location, notes, status,
-       last_seen_at, created_at, updated_at
+       last_seen_at, created_at, updated_at, ingest_token_hash
 FROM devices
 WHERE id = $1
 `
@@ -74,13 +77,40 @@ func (q *Queries) GetDevice(ctx context.Context, id pgtype.UUID) (Device, error)
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IngestTokenHash,
+	)
+	return i, err
+}
+
+const getDeviceByIngestTokenHash = `-- name: GetDeviceByIngestTokenHash :one
+SELECT id, name, identifier, device_type, location, notes, status,
+       last_seen_at, created_at, updated_at, ingest_token_hash
+FROM devices
+WHERE ingest_token_hash = $1
+`
+
+func (q *Queries) GetDeviceByIngestTokenHash(ctx context.Context, ingestTokenHash pgtype.Text) (Device, error) {
+	row := q.db.QueryRow(ctx, getDeviceByIngestTokenHash, ingestTokenHash)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Identifier,
+		&i.DeviceType,
+		&i.Location,
+		&i.Notes,
+		&i.Status,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IngestTokenHash,
 	)
 	return i, err
 }
 
 const getDeviceForUpdate = `-- name: GetDeviceForUpdate :one
 SELECT id, name, identifier, device_type, location, notes, status,
-       last_seen_at, created_at, updated_at
+       last_seen_at, created_at, updated_at, ingest_token_hash
 FROM devices
 WHERE id = $1
 FOR UPDATE
@@ -100,6 +130,7 @@ func (q *Queries) GetDeviceForUpdate(ctx context.Context, id pgtype.UUID) (Devic
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IngestTokenHash,
 	)
 	return i, err
 }
@@ -107,7 +138,7 @@ func (q *Queries) GetDeviceForUpdate(ctx context.Context, id pgtype.UUID) (Devic
 const listDevices = `-- name: ListDevices :many
 
 SELECT id, name, identifier, device_type, location, notes, status,
-       last_seen_at, created_at, updated_at
+       last_seen_at, created_at, updated_at, ingest_token_hash
 FROM devices
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::text IS NULL OR device_type = $2)
@@ -141,6 +172,7 @@ func (q *Queries) ListDevices(ctx context.Context, arg ListDevicesParams) ([]Dev
 			&i.LastSeenAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IngestTokenHash,
 		); err != nil {
 			return nil, err
 		}
@@ -150,6 +182,36 @@ func (q *Queries) ListDevices(ctx context.Context, arg ListDevicesParams) ([]Dev
 		return nil, err
 	}
 	return items, nil
+}
+
+const rotateDeviceToken = `-- name: RotateDeviceToken :one
+UPDATE devices
+SET ingest_token_hash = $1, updated_at = now()
+WHERE id = $2
+RETURNING id
+`
+
+type RotateDeviceTokenParams struct {
+	IngestTokenHash pgtype.Text `json:"ingest_token_hash"`
+	ID              pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) RotateDeviceToken(ctx context.Context, arg RotateDeviceTokenParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, rotateDeviceToken, arg.IngestTokenHash, arg.ID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const touchDeviceLastSeen = `-- name: TouchDeviceLastSeen :exec
+UPDATE devices
+SET last_seen_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) TouchDeviceLastSeen(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, touchDeviceLastSeen, id)
+	return err
 }
 
 const updateDevice = `-- name: UpdateDevice :one
@@ -162,7 +224,7 @@ SET name = $1,
     updated_at = now()
 WHERE id = $6
 RETURNING id, name, identifier, device_type, location, notes, status,
-          last_seen_at, created_at, updated_at
+          last_seen_at, created_at, updated_at, ingest_token_hash
 `
 
 type UpdateDeviceParams struct {
@@ -195,6 +257,7 @@ func (q *Queries) UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Dev
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IngestTokenHash,
 	)
 	return i, err
 }
@@ -204,7 +267,7 @@ UPDATE devices
 SET status = $1, updated_at = now()
 WHERE id = $2
 RETURNING id, name, identifier, device_type, location, notes, status,
-          last_seen_at, created_at, updated_at
+          last_seen_at, created_at, updated_at, ingest_token_hash
 `
 
 type UpdateDeviceStatusParams struct {
@@ -226,6 +289,7 @@ func (q *Queries) UpdateDeviceStatus(ctx context.Context, arg UpdateDeviceStatus
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IngestTokenHash,
 	)
 	return i, err
 }

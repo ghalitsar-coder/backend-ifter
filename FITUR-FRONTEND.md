@@ -123,7 +123,7 @@ Admin-only (`role = admin`).
 | Method | Path | Keterangan |
 |--------|------|------------|
 | GET | `/devices?status=active\|inactive&type=rfid_reader\|gate\|tablet\|other` | `{ "data": [...] }` |
-| POST | `/devices` | body `{ name, identifier, device_type, location?, notes? }` → 201 `{ "device": {...} }` |
+| POST | `/devices` | body `{ name, identifier, device_type, location?, notes? }` → 201 `{ "device": {...}, "ingest_token": "dt_..." }` |
 | GET | `/devices/:id` | `{ "device": {...} }` |
 | PUT | `/devices/:id` | body `{ name, identifier, device_type, location?, notes? }` → 200 `{ "device": {...} }` |
 | PATCH | `/devices/:id/status` | body `{ status: "active"\|"inactive" }` → 200 `{ "device": {...} }` |
@@ -146,8 +146,9 @@ Objek `device`:
 ```
 
 Aturan: `identifier` unik (409 `conflict` bila duplikat); perangkat tidak
-dihapus, cukup dinonaktifkan. `last_seen_at` belum diisi API ini — akan
-di-update oleh ingest tap RFID (F11).
+dihapus, cukup dinonaktifkan. `last_seen_at` diisi oleh ingest tap RFID (F11).
+`ingest_token` hanya muncul sekali di respons pembuatan — jangan disimpan di
+state jangka panjang; lihat F11 untuk rotasi.
 
 ### Tugas frontend
 
@@ -441,13 +442,107 @@ konsisten dengan laporan absensi harian.
 
 ---
 
-## F11/F12/F13 — Ketergantungan eksternal
+## F11 — Ingest tap RFID
 
-- **F11 RFID tap** bergantung pada F10 (registry perangkat) dan spesifikasi
-  payload reader. Endpoint ingest dan skema `last_seen_at` akan ditambahkan.
+**Status backend:** diimplementasikan di wave ini (migration `000021_device_ingest`).
+Melanjutkan registry F10: perangkat punya token, kartu siswa dipetakan ke UID,
+dan reader mengirim batch tap.
+
+### Kontrak backend
+
+**Registry (admin)** — tambahan dari F10:
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| POST | `/devices/:id/token` | rotasi token reader → 200 `{ "ingest_token": "dt_..." }` |
+
+**Pemetaan kartu (admin, staff_tu):**
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| GET | `/students/:id/card` | `{ "student_card": { "student_id": "uuid", "card_uid": "CARD-1001" \| null } }` |
+| PUT | `/students/:id/card` | body `{ "card_uid": "CARD-1001" }` atau `{ "card_uid": null }` (hapus) → 200 `{ "student_card": {...} }` |
+
+**Ingest (dipanggil reader, tanpa login user):**
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| POST | `/device-taps` | header `X-Device-Token: dt_...`, body `{ "device_identifier": "RFID-GATE-01", "taps": [ { "card_uid": "CARD-1001", "occurred_at": "2026-09-12T07:01:00Z" } ] }` → 200 `{ "accepted": 2, "duplicates": 0, "unknown_cards": 1 }` |
+
+**Log tap (admin, duty_teacher, principal):**
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| GET | `/device-taps?device_id=&student_id=&card_uid=&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=&offset=` | `{ "data": [tap], "total": n, "limit": 50, "offset": 0 }` |
+
+Objek `tap`:
+
+```json
+{
+  "id": "uuid",
+  "device_id": "uuid",
+  "device_name": "Reader Gerbang",
+  "device_identifier": "RFID-GATE-01",
+  "student_id": "uuid",
+  "student_number": "S-1001",
+  "student_name": "Budi Santoso",
+  "card_uid": "CARD-1001",
+  "occurred_at": "...",
+  "created_at": "..."
+}
+```
+
+`student_id`/`student_number`/`student_name` bernilai `null` bila kartu belum
+dipetakan ke siswa.
+
+Aturan ingest:
+
+- Token dibuat saat `POST /devices` dan hanya ditampilkan sekali; server hanya
+  menyimpan hash. Token hilang/dicuri → `POST /devices/:id/token`, token lama
+  langsung tidak berlaku.
+- Token tidak dikenal/`device_identifier` tidak cocok → 401
+  `invalid_device_token`. Perangkat `inactive` → 403 `device_inactive`.
+- `card_uid` dirapikan (trim + uppercase, maks 64 karakter, tanpa spasi);
+  `occurred_at` RFC3339, boleh telat (reader offline), tetapi ditolak bila
+  lebih dari 5 menit di masa depan.
+- Batch 1–100 tap. Duplikat per `(device, card_uid, occurred_at)` diabaikan dan
+  dihitung di `duplicates`, sehingga reader boleh mengulang batch.
+- Tap dengan kartu tak dikenal tetap disimpan (`unknown_cards`), agar bisa
+  ditelusuri lewat log. Pemetaan kartu berlaku untuk tap berikutnya; tap lama
+  tidak di-backfill.
+- Setiap batch sukses memperbarui `last_seen_at` perangkat.
+
+### Tugas frontend
+
+1. Setelah `POST /devices`, tampilkan `ingest_token` sekali di modal dengan
+   tombol salin dan peringatan "token tidak dapat dilihat lagi".
+2. Aksi "Rotasi token" di halaman perangkat (admin) dengan konfirmasi, lalu
+   tampilkan token baru sekali.
+3. Kolom `last_seen_at` pada tabel perangkat otomatis terisi setelah reader
+   mengirim tap (sudah ada di F10).
+4. Di detail siswa (admin/staff_tu), tambahkan field kartu: input UID, simpan,
+   dan tombol hapus pemetaan. Tampilkan error 409 spesifik bila kartu sudah
+   dipakai siswa lain.
+5. Halaman/panel "Log tap" untuk admin, piket, dan principal: filter perangkat,
+   rentang tanggal, dan UID kartu; baris tanpa siswa tampil sebagai
+   "Kartu belum terdaftar" dengan UID-nya.
+6. Live tap stream piket: polling `GET /device-taps?limit=20` (mis. tiap 5
+   detik), dedupe berdasarkan `id`; tidak perlu websocket.
+
+### Kriteria terima
+
+- Token tidak pernah muncul di `GET /devices`; rotasi langsung mematikan token
+  lama.
+- Perangkat nonaktif berhenti menerima tap dengan pesan 403 yang jelas.
+- Mengirim batch yang sama dua kali tidak menggandakan baris; UI menampilkan
+  jumlah `accepted` dan `duplicates`.
+- Tap kartu tak dikenal tetap terlihat di log dengan `student_id: null`.
+- Tidak ada key locale baru.
+
+---
+
+## F12/F13 — Ketergantungan eksternal
+
 - **F12 WhatsApp** membutuhkan pilihan provider (Meta Cloud API / Twilio) dan
   kredensial sebelum adapter dibuat.
 - **F13 API publik + webhook** menunggu desain otorisasi API key.
-
-Frontend untuk F11 sudah sebagian ada (live tap stream piket); sinkronisasi
-kontrak akan dicatat saat backend-nya dibangun.

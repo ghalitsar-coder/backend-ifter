@@ -135,16 +135,26 @@ type ClassEnrollment struct {
 }
 
 type Device struct {
+	ID              pgtype.UUID        `json:"id"`
+	Name            string             `json:"name"`
+	Identifier      string             `json:"identifier"`
+	DeviceType      string             `json:"device_type"`
+	Location        pgtype.Text        `json:"location"`
+	Notes           pgtype.Text        `json:"notes"`
+	Status          string             `json:"status"`
+	LastSeenAt      pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	IngestTokenHash pgtype.Text        `json:"ingest_token_hash"`
+}
+
+type DeviceTap struct {
 	ID         pgtype.UUID        `json:"id"`
-	Name       string             `json:"name"`
-	Identifier string             `json:"identifier"`
-	DeviceType string             `json:"device_type"`
-	Location   pgtype.Text        `json:"location"`
-	Notes      pgtype.Text        `json:"notes"`
-	Status     string             `json:"status"`
-	LastSeenAt pgtype.Timestamptz `json:"last_seen_at"`
+	DeviceID   pgtype.UUID        `json:"device_id"`
+	StudentID  pgtype.UUID        `json:"student_id"`
+	CardUid    string             `json:"card_uid"`
+	OccurredAt pgtype.Timestamptz `json:"occurred_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type DisciplineCategory struct {
@@ -367,6 +377,13 @@ type Student struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	UserID                pgtype.UUID        `json:"user_id"`
+}
+
+type StudentCard struct {
+	StudentID pgtype.UUID        `json:"student_id"`
+	CardUid   string             `json:"card_uid"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type StudentNote struct {

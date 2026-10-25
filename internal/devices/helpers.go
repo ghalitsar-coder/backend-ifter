@@ -134,32 +134,32 @@ func newDeviceView(device Device) deviceView {
 	}
 }
 
-func (s *Service) auditData(ctx context.Context, q *db.Queries, actorID pgtype.UUID, action string, entityID pgtype.UUID, before, after any, requestID string) error {
+func (s *Service) auditData(ctx context.Context, q *db.Queries, actorID pgtype.UUID, entityType, action string, entityID pgtype.UUID, before, after any, requestID string) error {
 	var beforeData, afterData []byte
 	var err error
 	if before != nil {
 		beforeData, err = json.Marshal(before)
 		if err != nil {
-			return fmt.Errorf("encode device audit before data: %w", err)
+			return fmt.Errorf("encode %s audit before data: %w", entityType, err)
 		}
 	}
 	if after != nil {
 		afterData, err = json.Marshal(after)
 		if err != nil {
-			return fmt.Errorf("encode device audit after data: %w", err)
+			return fmt.Errorf("encode %s audit after data: %w", entityType, err)
 		}
 	}
 	_, err = q.CreateAuditLog(ctx, db.CreateAuditLogParams{
 		ActorUserID: actorID,
 		Action:      action,
-		EntityType:  "device",
+		EntityType:  entityType,
 		EntityID:    entityID,
 		RequestID:   optionalText(requestID),
 		BeforeData:  string(beforeData),
 		AfterData:   string(afterData),
 	})
 	if err != nil {
-		return fmt.Errorf("create device audit log: %w", err)
+		return fmt.Errorf("create %s audit log: %w", entityType, err)
 	}
 	return nil
 }
