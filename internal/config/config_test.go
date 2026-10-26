@@ -42,6 +42,8 @@ log:
   format: text
 auth:
   jwt_secret: test-secret-at-least-32-characters-long
+  jwt_previous_secrets:
+    - previous-secret-at-least-32-characters
   jwt_issuer: test-issuer
   access_token_ttl: 10m
   refresh_token_ttl: 24h
@@ -92,6 +94,10 @@ maintenance:
 	}
 	if cfg.Auth.JWTIssuer != "test-issuer" || cfg.Auth.AccessTokenTTL != 10*time.Minute {
 		t.Fatalf("unexpected auth config: %+v", cfg.Auth)
+	}
+	if len(cfg.Auth.JWTPreviousSecrets) != 1 ||
+		cfg.Auth.JWTPreviousSecrets[0] != "previous-secret-at-least-32-characters" {
+		t.Fatalf("unexpected previous JWT secrets: %#v", cfg.Auth.JWTPreviousSecrets)
 	}
 	if cfg.Auth.InviteTokenTTL != 72*time.Hour || cfg.Auth.ResetTokenTTL != time.Hour {
 		t.Fatalf("unexpected credential token ttl config: %+v", cfg.Auth)
@@ -146,6 +152,11 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			name:  "short jwt secret",
 			yaml:  "auth:\n  jwt_secret: too-short\n",
 			error: "auth.jwt_secret",
+		},
+		{
+			name:  "short previous jwt secret",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\n  jwt_previous_secrets:\n    - too-short\n",
+			error: "auth.jwt_previous_secrets",
 		},
 		{
 			name:  "refresh ttl not longer than access ttl",

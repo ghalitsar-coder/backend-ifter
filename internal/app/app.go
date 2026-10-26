@@ -38,7 +38,7 @@ func Run(ctx context.Context) error {
 	defer pool.Close()
 	metrics.RegisterDBPool(pool)
 
-	tokens := auth.NewTokenManager(cfg.Auth.JWTSecret, cfg.Auth.JWTIssuer, cfg.Auth.AccessTokenTTL)
+	tokens := auth.NewTokenManager(cfg.Auth.JWTSecret, cfg.Auth.JWTIssuer, cfg.Auth.AccessTokenTTL, cfg.Auth.JWTPreviousSecrets...)
 	authService := auth.NewService(pool, tokens, auth.ServiceConfig{
 		RefreshTokenTTL: cfg.Auth.RefreshTokenTTL,
 		InviteTokenTTL:  cfg.Auth.InviteTokenTTL,

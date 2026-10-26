@@ -81,6 +81,12 @@ memeriksa `Origin`. Setiap token membawa `token_version` pengguna; reset atau
 aktivasi password menaikkan versi itu sehingga access token lama langsung
 ditolak tanpa menunggu kedaluwarsa.
 
+Rotasi `auth.jwt_secret` tanpa memutus sesi: pindahkan secret lama ke
+`auth.jwt_previous_secrets`, set secret baru di `auth.jwt_secret`, lalu deploy.
+Token baru ditandatangani dengan secret baru, sedangkan token yang masih hidup
+diverifikasi terhadap daftar secret lama. Hapus entri lama setelah melewati
+`auth.access_token_ttl`.
+
 Akun baru dibuat tanpa password default. Token invite/reset hanya dikembalikan
 sekali kepada admin, disimpan di database sebagai hash, berlaku sekali, dan
 tidak ditulis ke audit log. Masa berlaku diatur lewat
@@ -276,8 +282,10 @@ make db-up
 make test-integration
 ```
 
-CI menjalankan format, vet, integration test, build, `go mod verify`, dan
-`govulncheck` selain lint. `GET /metrics` menyediakan metrik Prometheus untuk
+CI menjalankan format, vet, test dengan race detector dan profil coverage,
+integration test, build, `go mod verify`, `govulncheck`, dan lint. Profil
+coverage diunggah sebagai artifact; Dependabot memeriksa update modul Go dan
+GitHub Actions setiap minggu. `GET /metrics` menyediakan metrik Prometheus untuk
 request dan pool database; endpoint ini hanya didaftarkan bila
 `hardening.metrics_token` diisi dan wajib diakses dengan
 `Authorization: Bearer <token>`.

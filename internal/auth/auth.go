@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -96,7 +97,9 @@ type ServiceConfig struct {
 }
 
 type TokenManager struct {
-	secret    []byte
+	// secrets[0] signs new tokens; the rest are accepted for verification so a
+	// secret can be rotated without invalidating live access tokens.
+	secrets   [][]byte
 	issuer    string
 	accessTTL time.Duration
 }
@@ -108,8 +111,15 @@ type accessTokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-func NewTokenManager(secret, issuer string, accessTTL time.Duration) *TokenManager {
-	return &TokenManager{secret: []byte(secret), issuer: issuer, accessTTL: accessTTL}
+func NewTokenManager(secret, issuer string, accessTTL time.Duration, previousSecrets ...string) *TokenManager {
+	secrets := make([][]byte, 0, 1+len(previousSecrets))
+	secrets = append(secrets, []byte(secret))
+	for _, previous := range previousSecrets {
+		if previous = strings.TrimSpace(previous); previous != "" {
+			secrets = append(secrets, []byte(previous))
+		}
+	}
+	return &TokenManager{secrets: secrets, issuer: issuer, accessTTL: accessTTL}
 }
 
 func (m *TokenManager) Issue(userID string, tokenVersion int) (string, time.Time, error) {
@@ -125,7 +135,7 @@ func (m *TokenManager) Issue(userID string, tokenVersion int) (string, time.Time
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(m.secret)
+	signed, err := token.SignedString(m.secrets[0])
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("sign access token: %w", err)
 	}
@@ -133,22 +143,24 @@ func (m *TokenManager) Issue(userID string, tokenVersion int) (string, time.Time
 }
 
 func (m *TokenManager) Parse(raw string) (string, int, error) {
-	claims := &accessTokenClaims{}
-	token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
-		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
-			return nil, ErrUnauthorized
+	for _, secret := range m.secrets {
+		claims := &accessTokenClaims{}
+		token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
+			if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+				return nil, ErrUnauthorized
+			}
+			return secret, nil
+		},
+			jwt.WithIssuer(m.issuer),
+			jwt.WithExpirationRequired(),
+			jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+			jwt.WithLeeway(30*time.Second),
+		)
+		if err == nil && token.Valid && claims.Subject != "" {
+			return claims.Subject, claims.Version, nil
 		}
-		return m.secret, nil
-	},
-		jwt.WithIssuer(m.issuer),
-		jwt.WithExpirationRequired(),
-		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
-		jwt.WithLeeway(30*time.Second),
-	)
-	if err != nil || !token.Valid || claims.Subject == "" {
-		return "", 0, ErrUnauthorized
 	}
-	return claims.Subject, claims.Version, nil
+	return "", 0, ErrUnauthorized
 }
 
 func newOpaqueToken() (raw, hash string, err error) {

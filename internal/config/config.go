@@ -63,18 +63,19 @@ type LogConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret       string               `mapstructure:"jwt_secret"`
-	JWTIssuer       string               `mapstructure:"jwt_issuer"`
-	AccessTokenTTL  time.Duration        `mapstructure:"access_token_ttl"`
-	RefreshTokenTTL time.Duration        `mapstructure:"refresh_token_ttl"`
-	InviteTokenTTL  time.Duration        `mapstructure:"invite_token_ttl"`
-	ResetTokenTTL   time.Duration        `mapstructure:"reset_token_ttl"`
-	CookieSecure    bool                 `mapstructure:"cookie_secure"`
-	BcryptCost      int                  `mapstructure:"bcrypt_cost"`
-	AllowedOrigins  []string             `mapstructure:"allowed_origins"`
-	LoginRateLimit  int                  `mapstructure:"login_rate_limit"`
-	LoginRateWindow time.Duration        `mapstructure:"login_rate_window"`
-	BootstrapAdmin  BootstrapAdminConfig `mapstructure:"bootstrap_admin"`
+	JWTSecret          string               `mapstructure:"jwt_secret"`
+	JWTPreviousSecrets []string             `mapstructure:"jwt_previous_secrets"`
+	JWTIssuer          string               `mapstructure:"jwt_issuer"`
+	AccessTokenTTL     time.Duration        `mapstructure:"access_token_ttl"`
+	RefreshTokenTTL    time.Duration        `mapstructure:"refresh_token_ttl"`
+	InviteTokenTTL     time.Duration        `mapstructure:"invite_token_ttl"`
+	ResetTokenTTL      time.Duration        `mapstructure:"reset_token_ttl"`
+	CookieSecure       bool                 `mapstructure:"cookie_secure"`
+	BcryptCost         int                  `mapstructure:"bcrypt_cost"`
+	AllowedOrigins     []string             `mapstructure:"allowed_origins"`
+	LoginRateLimit     int                  `mapstructure:"login_rate_limit"`
+	LoginRateWindow    time.Duration        `mapstructure:"login_rate_window"`
+	BootstrapAdmin     BootstrapAdminConfig `mapstructure:"bootstrap_admin"`
 }
 
 type BootstrapAdminConfig struct {
@@ -178,6 +179,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("log.format", "json")
 
 	v.SetDefault("auth.jwt_secret", "")
+	v.SetDefault("auth.jwt_previous_secrets", []string{})
 	v.SetDefault("auth.jwt_issuer", "backend-ifter")
 	v.SetDefault("auth.access_token_ttl", 15*time.Minute)
 	v.SetDefault("auth.refresh_token_ttl", 7*24*time.Hour)
@@ -223,6 +225,13 @@ func (c *Config) normalize() {
 	c.Log.Format = strings.ToLower(strings.TrimSpace(c.Log.Format))
 
 	c.Auth.JWTIssuer = strings.TrimSpace(c.Auth.JWTIssuer)
+	previousSecrets := make([]string, 0, len(c.Auth.JWTPreviousSecrets))
+	for _, secret := range c.Auth.JWTPreviousSecrets {
+		if secret = strings.TrimSpace(secret); secret != "" {
+			previousSecrets = append(previousSecrets, secret)
+		}
+	}
+	c.Auth.JWTPreviousSecrets = previousSecrets
 	c.Auth.BootstrapAdmin.Username = strings.TrimSpace(c.Auth.BootstrapAdmin.Username)
 	c.Auth.BootstrapAdmin.Email = strings.TrimSpace(c.Auth.BootstrapAdmin.Email)
 	c.Auth.BootstrapAdmin.FullName = strings.TrimSpace(c.Auth.BootstrapAdmin.FullName)
@@ -330,6 +339,11 @@ func (c *Config) Validate() error {
 
 	if len(c.Auth.JWTSecret) < 32 {
 		return errors.New("auth.jwt_secret must be at least 32 characters")
+	}
+	for _, secret := range c.Auth.JWTPreviousSecrets {
+		if len(secret) < 32 {
+			return errors.New("auth.jwt_previous_secrets entries must be at least 32 characters")
+		}
 	}
 	if c.Auth.JWTIssuer == "" {
 		return errors.New("auth.jwt_issuer is required")

@@ -54,6 +54,40 @@ func TestTokenManagerRejectsInvalidTokens(t *testing.T) {
 	}
 }
 
+func TestTokenManagerKeyRotation(t *testing.T) {
+	const (
+		oldSecret = "old-secret-at-least-32-characters-long"
+		newSecret = "new-secret-at-least-32-characters-long"
+		issuer    = "test-issuer"
+		userID    = "4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10"
+	)
+	oldManager := NewTokenManager(oldSecret, issuer, 15*time.Minute)
+	oldToken, _, err := oldManager.Issue(userID, 2)
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	rotated := NewTokenManager(newSecret, issuer, 15*time.Minute, oldSecret)
+	subject, version, err := rotated.Parse(oldToken)
+	if err != nil {
+		t.Fatalf("Parse() with previous secret error = %v", err)
+	}
+	if subject != userID || version != 2 {
+		t.Fatalf("Parse() = (%q, %d), want (%q, 2)", subject, version, userID)
+	}
+
+	newToken, _, err := rotated.Issue(userID, 3)
+	if err != nil {
+		t.Fatalf("Issue() with rotated manager error = %v", err)
+	}
+	if _, _, err := NewTokenManager(newSecret, issuer, 15*time.Minute).Parse(oldToken); err == nil {
+		t.Fatal("Parse() accepted an old token without the previous secret")
+	}
+	if _, _, err := oldManager.Parse(newToken); err == nil {
+		t.Fatal("Parse() accepted a token signed with the new secret")
+	}
+}
+
 func TestRefreshTokenGeneration(t *testing.T) {
 	rawA, hashA, err := newOpaqueToken()
 	if err != nil {

@@ -39,6 +39,9 @@ auth:
   # Development default only. Set a random value of at least 32 characters
   # through IFTER_AUTH_JWT_SECRET in every real deployment.
   jwt_secret: dev-only-change-me-32-characters-minimum
+  # Untuk rotasi: pindahkan secret lama ke sini, pasang secret baru di
+  # jwt_secret, deploy, lalu hapus entri setelah access token lama kedaluwarsa.
+  jwt_previous_secrets: []
   jwt_issuer: backend-ifter
   access_token_ttl: 15m
   refresh_token_ttl: 168h
