@@ -282,6 +282,18 @@ request dan pool database; endpoint ini hanya didaftarkan bila
 `hardening.metrics_token` diisi dan wajib diakses dengan
 `Authorization: Bearer <token>`.
 
+Koneksi database didaur ulang setelah `db.max_conn_lifetime`, koneksi idle
+ditutup setelah `db.max_conn_idle_time`, dan setiap statement dibatasi
+`db.statement_timeout` (default 15 detik). Setiap request menerima konteks
+dengan batas `hardening.request_timeout` (default 30 detik); handler yang
+melewati batas sebelum menulis respons dikembalikan sebagai 504. Ingest tap
+RFID me-resolve seluruh kartu dalam satu query per batch, bukan satu query per
+tap.
+
+Rate limit login dan ingest disimpan di memori proses. Bila API dijalankan
+lebih dari satu replika tanpa sticky session, pasang rate limit tambahan di
+reverse proxy atau pindahkan limiter ke Redis.
+
 Verifikasi ala ECC dijalankan per fase dengan `make verify-phase`:
 
 | Phase | Cakupan |

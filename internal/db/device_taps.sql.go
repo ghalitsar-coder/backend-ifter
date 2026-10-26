@@ -82,26 +82,6 @@ func (q *Queries) DeleteStudentCard(ctx context.Context, studentID pgtype.UUID) 
 	return result.RowsAffected(), nil
 }
 
-const getStudentByCardUID = `-- name: GetStudentByCardUID :one
-SELECT s.id, s.student_number, s.full_name
-FROM student_cards c
-JOIN students s ON s.id = c.student_id
-WHERE c.card_uid = $1
-`
-
-type GetStudentByCardUIDRow struct {
-	ID            pgtype.UUID `json:"id"`
-	StudentNumber string      `json:"student_number"`
-	FullName      string      `json:"full_name"`
-}
-
-func (q *Queries) GetStudentByCardUID(ctx context.Context, cardUid string) (GetStudentByCardUIDRow, error) {
-	row := q.db.QueryRow(ctx, getStudentByCardUID, cardUid)
-	var i GetStudentByCardUIDRow
-	err := row.Scan(&i.ID, &i.StudentNumber, &i.FullName)
-	return i, err
-}
-
 const getStudentCard = `-- name: GetStudentCard :one
 
 SELECT student_id, card_uid, created_at, updated_at
@@ -120,6 +100,38 @@ func (q *Queries) GetStudentCard(ctx context.Context, studentID pgtype.UUID) (St
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getStudentsByCardUIDs = `-- name: GetStudentsByCardUIDs :many
+SELECT c.card_uid, s.id AS student_id
+FROM student_cards c
+JOIN students s ON s.id = c.student_id
+WHERE c.card_uid = ANY($1::text[])
+`
+
+type GetStudentsByCardUIDsRow struct {
+	CardUid   string      `json:"card_uid"`
+	StudentID pgtype.UUID `json:"student_id"`
+}
+
+func (q *Queries) GetStudentsByCardUIDs(ctx context.Context, cardUids []string) ([]GetStudentsByCardUIDsRow, error) {
+	rows, err := q.db.Query(ctx, getStudentsByCardUIDs, cardUids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetStudentsByCardUIDsRow{}
+	for rows.Next() {
+		var i GetStudentsByCardUIDsRow
+		if err := rows.Scan(&i.CardUid, &i.StudentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDeviceTaps = `-- name: ListDeviceTaps :many

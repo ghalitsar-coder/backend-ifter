@@ -15,11 +15,11 @@ RETURNING student_id, card_uid, created_at, updated_at;
 -- name: DeleteStudentCard :execrows
 DELETE FROM student_cards WHERE student_id = sqlc.arg(student_id);
 
--- name: GetStudentByCardUID :one
-SELECT s.id, s.student_number, s.full_name
+-- name: GetStudentsByCardUIDs :many
+SELECT c.card_uid, s.id AS student_id
 FROM student_cards c
 JOIN students s ON s.id = c.student_id
-WHERE c.card_uid = sqlc.arg(card_uid);
+WHERE c.card_uid = ANY(sqlc.arg(card_uids)::text[]);
 
 -- name: CreateDeviceTap :execrows
 INSERT INTO device_taps (device_id, student_id, card_uid, occurred_at)

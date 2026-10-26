@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -14,6 +15,25 @@ import (
 
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/response"
 )
+
+// Timeout bounds the request context so handlers and database calls stop when
+// the deadline passes. A handler that has not written anything yet gets a 504.
+// A non-positive timeout disables the middleware.
+func Timeout(timeout time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if timeout <= 0 {
+			c.Next()
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+		defer cancel()
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+		if ctx.Err() == context.DeadlineExceeded && !c.Writer.Written() {
+			response.Error(c, http.StatusGatewayTimeout, "request_timeout", "request timed out")
+		}
+	}
+}
 
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {

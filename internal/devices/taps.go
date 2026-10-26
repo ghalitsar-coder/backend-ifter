@@ -85,16 +85,26 @@ func (s *Service) IngestTaps(ctx context.Context, token string, batch TapBatch) 
 	result := TapIngestResult{}
 	err = database.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
+		cardUIDs := make([]string, 0, len(taps))
+		seen := make(map[string]struct{}, len(taps))
 		for _, tap := range taps {
-			var studentID pgtype.UUID
-			student, err := q.GetStudentByCardUID(ctx, tap.cardUID)
-			if err != nil {
-				if !database.IsNotFound(err) {
-					return fmt.Errorf("resolve student card: %w", err)
-				}
-			} else {
-				studentID = student.ID
+			if _, ok := seen[tap.cardUID]; ok {
+				continue
 			}
+			seen[tap.cardUID] = struct{}{}
+			cardUIDs = append(cardUIDs, tap.cardUID)
+		}
+		students := make(map[string]pgtype.UUID, len(cardUIDs))
+		rows, err := q.GetStudentsByCardUIDs(ctx, cardUIDs)
+		if err != nil {
+			return fmt.Errorf("resolve student cards: %w", err)
+		}
+		for _, row := range rows {
+			students[row.CardUid] = row.StudentID
+		}
+
+		for _, tap := range taps {
+			studentID := students[tap.cardUID]
 			inserted, err := q.CreateDeviceTap(ctx, db.CreateDeviceTapParams{
 				DeviceID:   device.ID,
 				StudentID:  studentID,

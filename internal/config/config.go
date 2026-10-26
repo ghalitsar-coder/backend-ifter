@@ -42,15 +42,19 @@ type HTTPConfig struct {
 }
 
 type DBConfig struct {
-	Host           string        `mapstructure:"host"`
-	Port           int           `mapstructure:"port"`
-	User           string        `mapstructure:"user"`
-	Password       string        `mapstructure:"password"`
-	Name           string        `mapstructure:"name"`
-	SSLMode        string        `mapstructure:"sslmode"`
-	MaxConns       int32         `mapstructure:"max_conns"`
-	MinConns       int32         `mapstructure:"min_conns"`
-	ConnectTimeout time.Duration `mapstructure:"connect_timeout"`
+	Host              string        `mapstructure:"host"`
+	Port              int           `mapstructure:"port"`
+	User              string        `mapstructure:"user"`
+	Password          string        `mapstructure:"password"`
+	Name              string        `mapstructure:"name"`
+	SSLMode           string        `mapstructure:"sslmode"`
+	MaxConns          int32         `mapstructure:"max_conns"`
+	MinConns          int32         `mapstructure:"min_conns"`
+	ConnectTimeout    time.Duration `mapstructure:"connect_timeout"`
+	MaxConnLifetime   time.Duration `mapstructure:"max_conn_lifetime"`
+	MaxConnIdleTime   time.Duration `mapstructure:"max_conn_idle_time"`
+	HealthCheckPeriod time.Duration `mapstructure:"health_check_period"`
+	StatementTimeout  time.Duration `mapstructure:"statement_timeout"`
 }
 
 type LogConfig struct {
@@ -90,11 +94,13 @@ type ImportsConfig struct {
 
 // HardeningConfig covers optional production hardening. MetricsToken empty
 // disables the /metrics endpoint entirely; a non-empty token requires
-// Authorization: Bearer <token>.
+// Authorization: Bearer <token>. RequestTimeout bounds every request context;
+// zero disables the timeout (used by tests that call the router directly).
 type HardeningConfig struct {
 	MetricsToken     string        `mapstructure:"metrics_token"`
 	IngestRateLimit  int           `mapstructure:"ingest_rate_limit"`
 	IngestRateWindow time.Duration `mapstructure:"ingest_rate_window"`
+	RequestTimeout   time.Duration `mapstructure:"request_timeout"`
 }
 
 // MaintenanceConfig controls data retention. AuditLogRetention zero disables
@@ -163,6 +169,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("db.max_conns", 10)
 	v.SetDefault("db.min_conns", 0)
 	v.SetDefault("db.connect_timeout", 5*time.Second)
+	v.SetDefault("db.max_conn_lifetime", 30*time.Minute)
+	v.SetDefault("db.max_conn_idle_time", 5*time.Minute)
+	v.SetDefault("db.health_check_period", 30*time.Second)
+	v.SetDefault("db.statement_timeout", 15*time.Second)
 
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "json")
@@ -192,6 +202,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("hardening.metrics_token", "")
 	v.SetDefault("hardening.ingest_rate_limit", 600)
 	v.SetDefault("hardening.ingest_rate_window", time.Minute)
+	v.SetDefault("hardening.request_timeout", 30*time.Second)
 
 	v.SetDefault("maintenance.audit_log_retention", 0)
 	v.SetDefault("maintenance.refresh_token_retention", 30*24*time.Hour)
@@ -289,6 +300,16 @@ func (c *Config) Validate() error {
 	if c.DB.ConnectTimeout <= 0 {
 		return errors.New("db.connect_timeout must be greater than zero")
 	}
+	for name, value := range map[string]time.Duration{
+		"db.max_conn_lifetime":   c.DB.MaxConnLifetime,
+		"db.max_conn_idle_time":  c.DB.MaxConnIdleTime,
+		"db.health_check_period": c.DB.HealthCheckPeriod,
+		"db.statement_timeout":   c.DB.StatementTimeout,
+	} {
+		if value <= 0 {
+			return fmt.Errorf("%s must be greater than zero", name)
+		}
+	}
 	if c.App.Env == "production" && c.DB.Password == "" {
 		return errors.New("db.password is required in production")
 	}
@@ -366,6 +387,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Hardening.IngestRateWindow <= 0 {
 		return errors.New("hardening.ingest_rate_window must be greater than zero")
+	}
+	if c.Hardening.RequestTimeout <= 0 {
+		return errors.New("hardening.request_timeout must be greater than zero")
 	}
 
 	if c.Maintenance.AuditLogRetention < 0 {

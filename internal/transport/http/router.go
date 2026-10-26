@@ -169,6 +169,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 		middleware.Metrics(),
 		middleware.AccessLog(log),
 		middleware.Recovery(log),
+		middleware.Timeout(options.hardening.RequestTimeout),
 		middleware.CORS(authCfg.AllowedOrigins),
 	)
 

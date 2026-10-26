@@ -33,6 +33,10 @@ db:
   max_conns: 5
   min_conns: 1
   connect_timeout: 2s
+  max_conn_lifetime: 1h
+  max_conn_idle_time: 10m
+  health_check_period: 15s
+  statement_timeout: 8s
 log:
   level: debug
   format: text
@@ -51,6 +55,7 @@ hardening:
   metrics_token: metrics-secret
   ingest_rate_limit: 120
   ingest_rate_window: 30s
+  request_timeout: 20s
 maintenance:
   audit_log_retention: 8760h
   refresh_token_retention: 168h
@@ -78,6 +83,10 @@ maintenance:
 	if cfg.DB.Port != 5433 || cfg.DB.MaxConns != 5 || cfg.DB.MinConns != 1 {
 		t.Fatalf("unexpected db config: %+v", cfg.DB)
 	}
+	if cfg.DB.MaxConnLifetime != time.Hour || cfg.DB.MaxConnIdleTime != 10*time.Minute ||
+		cfg.DB.HealthCheckPeriod != 15*time.Second || cfg.DB.StatementTimeout != 8*time.Second {
+		t.Fatalf("unexpected db pool config: %+v", cfg.DB)
+	}
 	if cfg.Log.Level != "debug" || cfg.Log.Format != "text" {
 		t.Fatalf("unexpected log config: %+v", cfg.Log)
 	}
@@ -95,7 +104,8 @@ maintenance:
 	}
 	if cfg.Hardening.MetricsToken != "metrics-secret" ||
 		cfg.Hardening.IngestRateLimit != 120 ||
-		cfg.Hardening.IngestRateWindow != 30*time.Second {
+		cfg.Hardening.IngestRateWindow != 30*time.Second ||
+		cfg.Hardening.RequestTimeout != 20*time.Second {
 		t.Fatalf("unexpected hardening config: %+v", cfg.Hardening)
 	}
 	if cfg.Maintenance.AuditLogRetention != 8760*time.Hour ||
@@ -171,6 +181,16 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			name:  "invalid ingest rate window",
 			yaml:  "auth:\n  jwt_secret: " + secret + "\nhardening:\n  ingest_rate_window: -1s\n",
 			error: "hardening.ingest_rate_window",
+		},
+		{
+			name:  "invalid request timeout",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\nhardening:\n  request_timeout: 0s\n",
+			error: "hardening.request_timeout",
+		},
+		{
+			name:  "invalid statement timeout",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\ndb:\n  statement_timeout: -1s\n",
+			error: "db.statement_timeout",
 		},
 		{
 			name:  "negative audit retention",
