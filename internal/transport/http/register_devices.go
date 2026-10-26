@@ -1,6 +1,8 @@
 package httptransport
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
@@ -45,7 +47,19 @@ func RegisterDevices(v1 *gin.RouterGroup, groups RouteGroups, deps FeatureDeps) 
 	groups.MasterData.GET("/students/:id/card", handler.GetStudentCard)
 	groups.MasterData.PUT("/students/:id/card", middleware.BodyLimit(4<<10), handler.SetStudentCard)
 
-	v1.POST("/device-taps", middleware.BodyLimit(128<<10), handler.IngestTaps)
+	ingestLimit := deps.Hardening.IngestRateLimit
+	if ingestLimit < 1 {
+		ingestLimit = 600
+	}
+	ingestWindow := deps.Hardening.IngestRateWindow
+	if ingestWindow <= 0 {
+		ingestWindow = time.Minute
+	}
+	v1.POST("/device-taps",
+		middleware.BodyLimit(128<<10),
+		middleware.IPRateLimit(ingestLimit, ingestWindow),
+		handler.IngestTaps,
+	)
 
 	tapReaders := groups.Authenticated.Group("")
 	tapReaders.Use(middleware.RequireRoles(RoleAdmin, RoleDutyTeacher, RolePrincipal))

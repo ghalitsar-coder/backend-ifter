@@ -15,12 +15,13 @@ import (
 )
 
 type Config struct {
-	App     AppConfig     `mapstructure:"app"`
-	HTTP    HTTPConfig    `mapstructure:"http"`
-	DB      DBConfig      `mapstructure:"db"`
-	Log     LogConfig     `mapstructure:"log"`
-	Auth    AuthConfig    `mapstructure:"auth"`
-	Imports ImportsConfig `mapstructure:"imports"`
+	App       AppConfig       `mapstructure:"app"`
+	HTTP      HTTPConfig      `mapstructure:"http"`
+	DB        DBConfig        `mapstructure:"db"`
+	Log       LogConfig       `mapstructure:"log"`
+	Auth      AuthConfig      `mapstructure:"auth"`
+	Imports   ImportsConfig   `mapstructure:"imports"`
+	Hardening HardeningConfig `mapstructure:"hardening"`
 }
 
 type AppConfig struct {
@@ -84,6 +85,15 @@ type ImportsConfig struct {
 	MaxRows        int           `mapstructure:"max_rows"`
 	FileRetention  time.Duration `mapstructure:"file_retention"`
 	ErrorRetention time.Duration `mapstructure:"error_retention"`
+}
+
+// HardeningConfig covers optional production hardening. MetricsToken empty
+// disables the /metrics endpoint entirely; a non-empty token requires
+// Authorization: Bearer <token>.
+type HardeningConfig struct {
+	MetricsToken     string        `mapstructure:"metrics_token"`
+	IngestRateLimit  int           `mapstructure:"ingest_rate_limit"`
+	IngestRateWindow time.Duration `mapstructure:"ingest_rate_window"`
 }
 
 func Load() (*Config, error) {
@@ -169,6 +179,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("imports.max_rows", 2000)
 	v.SetDefault("imports.file_retention", 7*24*time.Hour)
 	v.SetDefault("imports.error_retention", 30*24*time.Hour)
+
+	v.SetDefault("hardening.metrics_token", "")
+	v.SetDefault("hardening.ingest_rate_limit", 600)
+	v.SetDefault("hardening.ingest_rate_window", time.Minute)
 }
 
 func (c *Config) normalize() {
@@ -200,6 +214,7 @@ func (c *Config) normalize() {
 	}
 	c.Auth.AllowedOrigins = origins
 	c.Imports.Dir = strings.TrimSpace(c.Imports.Dir)
+	c.Hardening.MetricsToken = strings.TrimSpace(c.Hardening.MetricsToken)
 }
 
 func (c *Config) Validate() error {
@@ -263,6 +278,9 @@ func (c *Config) Validate() error {
 	}
 	if c.App.Env == "production" && c.DB.Password == "" {
 		return errors.New("db.password is required in production")
+	}
+	if c.App.Env == "production" && c.DB.SSLMode == "disable" {
+		return errors.New("db.sslmode must not be disable in production")
 	}
 
 	switch c.Log.Level {
@@ -328,6 +346,13 @@ func (c *Config) Validate() error {
 	}
 	if c.Imports.ErrorRetention <= 0 {
 		return errors.New("imports.error_retention must be greater than zero")
+	}
+
+	if c.Hardening.IngestRateLimit < 1 {
+		return errors.New("hardening.ingest_rate_limit must be at least 1")
+	}
+	if c.Hardening.IngestRateWindow <= 0 {
+		return errors.New("hardening.ingest_rate_window must be greater than zero")
 	}
 
 	admin := c.Auth.BootstrapAdmin

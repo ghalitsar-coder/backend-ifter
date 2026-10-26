@@ -78,7 +78,7 @@ func Run(ctx context.Context) error {
 	}
 
 	server := &http.Server{
-		Handler:           httptransport.New(log, pool, authService, masterDataService, importService, attendanceService, disciplineService, reportingService, cfg.Auth, cfg.HTTP.TrustedProxies),
+		Handler:           httptransport.New(log, pool, authService, masterDataService, importService, attendanceService, disciplineService, reportingService, cfg.Auth, cfg.HTTP.TrustedProxies, httptransport.WithHardening(cfg.Hardening)),
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,

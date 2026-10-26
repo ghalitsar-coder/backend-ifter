@@ -57,3 +57,12 @@ imports:
   # File asli dihapus setelah 7 hari; error per baris disimpan 30 hari.
   file_retention: 168h
   error_retention: 720h
+
+hardening:
+  # Token Bearer untuk GET /metrics. Kosong = endpoint tidak didaftarkan.
+  # Set lewat IFTER_HARDENING_METRICS_TOKEN di deployment nyata.
+  metrics_token: ""
+  # Batas request POST /device-taps per IP. Naikkan bila banyak reader
+  # mengirim batch dari satu alamat (mis. di balik NAT sekolah).
+  ingest_rate_limit: 600
+  ingest_rate_window: 1m

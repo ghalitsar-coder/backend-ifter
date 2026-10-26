@@ -7,8 +7,8 @@ import (
 
 func TestLoginLimiter(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	limiter := &loginLimiter{
-		entries: make(map[string]loginEntry),
+	limiter := &rateLimiter{
+		entries: make(map[string]rateEntry),
 		limit:   2,
 		window:  time.Minute,
 		now:     func() time.Time { return now },

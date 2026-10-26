@@ -12,10 +12,19 @@ import (
 )
 
 // shortcut: process-local rate limit, move to Redis when more than one API
-// instance serves login traffic.
+// instance serves the same clients.
 func LoginRateLimit(limit int, window time.Duration) gin.HandlerFunc {
-	limiter := &loginLimiter{
-		entries: make(map[string]loginEntry),
+	return ipRateLimit(limit, window, "too many login attempts")
+}
+
+// IPRateLimit caps requests per client IP for unauthenticated ingest surfaces.
+func IPRateLimit(limit int, window time.Duration) gin.HandlerFunc {
+	return ipRateLimit(limit, window, "too many requests")
+}
+
+func ipRateLimit(limit int, window time.Duration, message string) gin.HandlerFunc {
+	limiter := &rateLimiter{
+		entries: make(map[string]rateEntry),
 		limit:   limit,
 		window:  window,
 		now:     time.Now,
@@ -24,7 +33,7 @@ func LoginRateLimit(limit int, window time.Duration) gin.HandlerFunc {
 		allowed, retryAfter := limiter.allow(c.ClientIP(), limiter.now())
 		if !allowed {
 			c.Header("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
-			response.Error(c, http.StatusTooManyRequests, "rate_limited", "too many login attempts")
+			response.Error(c, http.StatusTooManyRequests, "rate_limited", message)
 			return
 		}
 		c.Next()
@@ -40,21 +49,21 @@ func BodyLimit(maxBytes int64) gin.HandlerFunc {
 	}
 }
 
-type loginEntry struct {
+type rateEntry struct {
 	start time.Time
 	count int
 }
 
-type loginLimiter struct {
+type rateLimiter struct {
 	mu        sync.Mutex
-	entries   map[string]loginEntry
+	entries   map[string]rateEntry
 	limit     int
 	window    time.Duration
 	lastSweep time.Time
 	now       func() time.Time
 }
 
-func (l *loginLimiter) allow(key string, now time.Time) (bool, time.Duration) {
+func (l *rateLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -69,7 +78,7 @@ func (l *loginLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 
 	entry, ok := l.entries[key]
 	if !ok || now.Sub(entry.start) >= l.window {
-		l.entries[key] = loginEntry{start: now, count: 1}
+		l.entries[key] = rateEntry{start: now, count: 1}
 		return true, 0
 	}
 	if entry.count >= l.limit {

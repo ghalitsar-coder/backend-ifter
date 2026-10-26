@@ -276,8 +276,9 @@ make test-integration
 
 CI menjalankan format, vet, integration test, build, `go mod verify`, dan
 `govulncheck` selain lint. `GET /metrics` menyediakan metrik Prometheus untuk
-request dan pool database; gunakan endpoint itu untuk alert error rate,
-latensi, dan ketersediaan database.
+request dan pool database; endpoint ini hanya didaftarkan bila
+`hardening.metrics_token` diisi dan wajib diakses dengan
+`Authorization: Bearer <token>`.
 
 Verifikasi ala ECC dijalankan per fase dengan `make verify-phase`:
 
@@ -371,8 +372,15 @@ Health check:
 - `GET /healthz` — liveness, tidak menyentuh database.
 - `GET /readyz` — readiness, ping database.
 - `GET /metrics` — metrik Prometheus: jumlah dan latensi request per route/status
-  serta koneksi pool database. Endpoint ini tidak memakai autentikasi; batasi
-  aksesnya di reverse proxy atau jaringan internal.
+  serta koneksi pool database. Endpoint hanya didaftarkan bila
+  `hardening.metrics_token` (env `IFTER_HARDENING_METRICS_TOKEN`) diisi, dan
+  akses wajib menyertakan `Authorization: Bearer <token>`. Jika token kosong,
+  scrape metrics harus lewat jalur lain (mis. sidecar) atau endpoint tidak
+  tersedia sama sekali.
+
+`POST /api/v1/device-taps` dibatasi per IP klien (`hardening.ingest_rate_limit`,
+default 600 request/menit). Di balik NAT sekolah, naikkan batas atau pastikan
+`http.trusted_proxies` benar agar `ClientIP()` memakai alamat asli.
 
 ## End-to-end (e2e)
 

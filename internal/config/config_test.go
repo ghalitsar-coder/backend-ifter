@@ -47,6 +47,10 @@ auth:
     - http://localhost:3000/
   login_rate_limit: 5
   login_rate_window: 30s
+hardening:
+  metrics_token: metrics-secret
+  ingest_rate_limit: 120
+  ingest_rate_window: 30s
 `)
 	t.Setenv("CONFIG_FILE", path)
 
@@ -84,6 +88,11 @@ auth:
 	}
 	if len(cfg.Auth.AllowedOrigins) != 1 || cfg.Auth.AllowedOrigins[0] != "http://localhost:3000" {
 		t.Fatalf("unexpected allowed origins: %#v", cfg.Auth.AllowedOrigins)
+	}
+	if cfg.Hardening.MetricsToken != "metrics-secret" ||
+		cfg.Hardening.IngestRateLimit != 120 ||
+		cfg.Hardening.IngestRateWindow != 30*time.Second {
+		t.Fatalf("unexpected hardening config: %+v", cfg.Hardening)
 	}
 }
 
@@ -136,8 +145,23 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 		},
 		{
 			name:  "production without secure cookie",
-			yaml:  "app:\n  env: production\ndb:\n  password: secret\nauth:\n  jwt_secret: " + secret + "\n  cookie_secure: false\n",
+			yaml:  "app:\n  env: production\ndb:\n  password: secret\n  sslmode: require\nauth:\n  jwt_secret: " + secret + "\n  cookie_secure: false\n",
 			error: "auth.cookie_secure",
+		},
+		{
+			name:  "production with sslmode disable",
+			yaml:  "app:\n  env: production\ndb:\n  password: secret\n  sslmode: disable\nauth:\n  jwt_secret: " + secret + "\n  cookie_secure: true\n",
+			error: "db.sslmode",
+		},
+		{
+			name:  "invalid ingest rate limit",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\nhardening:\n  ingest_rate_limit: 0\n",
+			error: "hardening.ingest_rate_limit",
+		},
+		{
+			name:  "invalid ingest rate window",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\nhardening:\n  ingest_rate_window: -1s\n",
+			error: "hardening.ingest_rate_window",
 		},
 		{
 			name:  "invalid bcrypt cost",

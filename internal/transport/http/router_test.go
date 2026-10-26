@@ -41,6 +41,9 @@ func TestHealthz(t *testing.T) {
 	if got := rec.Header().Get("X-Request-ID"); got != "test-request-id" {
 		t.Fatalf("X-Request-ID = %q", got)
 	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q", got)
+	}
 }
 
 func TestReadyz(t *testing.T) {
@@ -77,16 +80,40 @@ func TestRequestIDIsGenerated(t *testing.T) {
 }
 
 func TestMetrics(t *testing.T) {
-	router := New(discardLogger(), fakeReadiness{}, nil, nil, nil, nil, nil, nil, config.AuthConfig{}, nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	newRouter := func(t *testing.T) http.Handler {
+		t.Helper()
+		return New(discardLogger(), fakeReadiness{}, nil, nil, nil, nil, nil, nil, config.AuthConfig{}, nil,
+			WithHardening(config.HardeningConfig{MetricsToken: "metrics-secret"}))
+	}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if body := rec.Body.String(); !strings.Contains(body, "go_goroutines") {
-		t.Fatalf("metrics body does not contain go_goroutines: %s", body)
-	}
+	t.Run("requires the configured token", func(t *testing.T) {
+		router := newRouter(t)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("anonymous status = %d, want %d", rec.Code, http.StatusUnauthorized)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		req.Header.Set("Authorization", "Bearer metrics-secret")
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("authorized status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if body := rec.Body.String(); !strings.Contains(body, "go_goroutines") {
+			t.Fatalf("metrics body does not contain go_goroutines: %s", body)
+		}
+	})
+
+	t.Run("unregistered without a token", func(t *testing.T) {
+		router := New(discardLogger(), fakeReadiness{}, nil, nil, nil, nil, nil, nil, config.AuthConfig{}, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+		}
+	})
 }
 
 func discardLogger() *slog.Logger {
@@ -116,6 +143,7 @@ func TestRouterCapabilityEndpoints(t *testing.T) {
 		reporting.NewService(nil, log),
 		config.AuthConfig{},
 		nil,
+		WithHardening(config.HardeningConfig{MetricsToken: "metrics-secret"}),
 	)
 
 	registered := make(map[string]struct{})

@@ -125,6 +125,23 @@ type FeatureDeps struct {
 	SubjectAttendance  *subjectattendancepkg.Service
 	Devices            *devicespkg.Service
 	Notifications      *notificationspkg.Service
+	Hardening          config.HardeningConfig
+}
+
+// Option configures optional hardening knobs without expanding New's positional
+// argument list for every caller.
+type Option func(*routerOptions)
+
+type routerOptions struct {
+	hardening config.HardeningConfig
+}
+
+// WithHardening enables the metric endpoint bearer guard and per-IP ingest
+// rate limit. Omitting it leaves /metrics unregistered.
+func WithHardening(cfg config.HardeningConfig) Option {
+	return func(opts *routerOptions) {
+		opts.hardening = cfg
+	}
 }
 
 // roleGroup derives a RequireRoles-guarded sub-group from an authenticated parent.
@@ -134,7 +151,12 @@ func roleGroup(parent *gin.RouterGroup, roles ...string) *gin.RouterGroup {
 	return group
 }
 
-func New(log *slog.Logger, readiness Readiness, authService *auth.Service, masterDataService *masterdata.Service, importService *importservice.Service, attendanceService *attendancepkg.Service, disciplineService *disciplinepkg.Service, reportingService *reporting.Service, authCfg config.AuthConfig, trustedProxies []string) *gin.Engine {
+func New(log *slog.Logger, readiness Readiness, authService *auth.Service, masterDataService *masterdata.Service, importService *importservice.Service, attendanceService *attendancepkg.Service, disciplineService *disciplinepkg.Service, reportingService *reporting.Service, authCfg config.AuthConfig, trustedProxies []string, opts ...Option) *gin.Engine {
+	var options routerOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	if err := r.SetTrustedProxies(trustedProxies); err != nil {
@@ -143,6 +165,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 	}
 	r.Use(
 		middleware.RequestID(),
+		middleware.SecurityHeaders(),
 		middleware.Metrics(),
 		middleware.AccessLog(log),
 		middleware.Recovery(log),
@@ -152,7 +175,12 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 	r.GET("/healthz", func(c *gin.Context) {
 		response.JSON(c, http.StatusOK, gin.H{"status": "ok"})
 	})
-	r.GET("/metrics", gin.WrapH(metrics.Handler()))
+	if options.hardening.MetricsToken != "" {
+		r.GET("/metrics",
+			middleware.BearerTokenAuth(options.hardening.MetricsToken),
+			gin.WrapH(metrics.Handler()),
+		)
+	}
 
 	r.GET("/readyz", func(c *gin.Context) {
 		if readiness == nil {
@@ -217,7 +245,7 @@ func New(log *slog.Logger, readiness Readiness, authService *auth.Service, maste
 		// Web-push is built before the discipline handler so a new violation
 		// can notify admin/principal subscribers (F9). The remaining
 		// FeatureDeps fields are assembled once the API pool is known below.
-		deps := FeatureDeps{Log: log}
+		deps := FeatureDeps{Log: log, Hardening: options.hardening}
 		if pool, ok := readiness.(*pgxpool.Pool); ok {
 			deps.Notifications = notificationspkg.NewService(pool, log, notificationspkg.ConfigFromEnvironment())
 		}
