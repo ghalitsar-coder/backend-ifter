@@ -313,6 +313,33 @@ luar host/volume Docker, enkripsi saat disimpan, dan uji restore ke database
 scratch secara berkala. Kebijakan retensi minimum yang disarankan: 7 backup
 harian dan 4 backup mingguan; sesuaikan dengan kebijakan sekolah.
 
+Job maintenance berjalan sekali saat start lalu setiap
+`maintenance.interval` (default 24 jam):
+
+- `maintenance.refresh_token_retention` (default `720h`) menghapus token
+  refresh yang sudah kedaluwarsa lebih lama dari nilai ini.
+- `maintenance.audit_log_retention` (default `0`) mematikan pemangkasan audit
+  log. Bila diisi, mis. `8760h`, audit log yang lebih tua dihapus permanen.
+  Penghapusan hanya berjalan di dalam transaksi job yang menyalakan flag lokal;
+  `DELETE`/`UPDATE`/`TRUNCATE` manual tetap ditolak trigger append-only.
+  Aktifkan hanya bila kebijakan retensi sekolah mengizinkannya.
+
+### Checklist produksi
+
+- Terminasi TLS di reverse proxy/load balancer. Proses API sendiri tidak
+  menangani sertifikat; header HSTS hanya dikirim bila request tiba lewat TLS,
+  jadi pasang HSTS di proxy. Jangan meneruskan HTTP polos ke publik.
+- Isi `http.trusted_proxies` hanya dengan alamat proxy agar rate limit membaca
+  IP klien sebenarnya, dan batasi endpoint `/metrics` di jaringan internal.
+- Set `app.env=production`, `auth.cookie_secure=true`,
+  `db.sslmode=require`/`verify-full`, serta token metrics acak. Konfigurasi
+  menolak start bila `sslmode=disable` atau cookie tidak secure di produksi.
+- Backup harian saja memberi RPO hingga 24 jam. Untuk RPO lebih kecil, aktifkan
+  arsip WAL berkelanjutan (mis. pgBackRest) dan uji restore ke database scratch
+  minimal sekali per kuartal.
+- Kirim log JSON dan metrik ke penyimpanan terpusat; audit log tidak ikut
+  dihapus oleh job kecuali retensi audit diaktifkan.
+
 ## Excel import & export
 
 Semua endpoint berikut khusus peran `admin`. File disimpan privat di

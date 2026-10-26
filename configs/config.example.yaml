@@ -66,3 +66,13 @@ hardening:
   # mengirim batch dari satu alamat (mis. di balik NAT sekolah).
   ingest_rate_limit: 600
   ingest_rate_window: 1m
+
+maintenance:
+  # Retensi audit log. 0 = audit log tidak pernah dihapus (default).
+  # Aktifkan hanya bila kebijakan sekolah mengizinkan, mis. 8760h (1 tahun).
+  # Penghapusan hanya berjalan lewat job internal; DELETE manual tetap ditolak.
+  audit_log_retention: 0
+  # Token refresh yang sudah kedaluwarsa dihapus setelah 30 hari.
+  refresh_token_retention: 720h
+  # Job berjalan sekali saat start lalu setiap interval.
+  interval: 24h

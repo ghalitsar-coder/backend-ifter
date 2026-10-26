@@ -38,6 +38,19 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 	return i, err
 }
 
+const deleteExpiredRefreshTokensBefore = `-- name: DeleteExpiredRefreshTokensBefore :execrows
+DELETE FROM refresh_tokens
+WHERE expires_at < $1
+`
+
+func (q *Queries) DeleteExpiredRefreshTokensBefore(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredRefreshTokensBefore, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
 SELECT id, user_id, token_hash, expires_at, revoked_at, replaced_by, created_at
 FROM refresh_tokens

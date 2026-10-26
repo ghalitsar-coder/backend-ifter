@@ -7,3 +7,8 @@ VALUES (
   sqlc.arg(request_id), NULLIF(sqlc.arg(before_data)::text, '')::jsonb, NULLIF(sqlc.arg(after_data)::text, '')::jsonb, sqlc.arg(reason)
 )
 RETURNING id, created_at;
+
+-- name: DeleteAuditLogsBefore :execrows
+-- Requires SET LOCAL ifter.audit_retention = 'on' in the same transaction.
+DELETE FROM audit_logs
+WHERE created_at < sqlc.arg(cutoff);

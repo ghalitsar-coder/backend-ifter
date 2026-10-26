@@ -15,13 +15,14 @@ import (
 )
 
 type Config struct {
-	App       AppConfig       `mapstructure:"app"`
-	HTTP      HTTPConfig      `mapstructure:"http"`
-	DB        DBConfig        `mapstructure:"db"`
-	Log       LogConfig       `mapstructure:"log"`
-	Auth      AuthConfig      `mapstructure:"auth"`
-	Imports   ImportsConfig   `mapstructure:"imports"`
-	Hardening HardeningConfig `mapstructure:"hardening"`
+	App         AppConfig         `mapstructure:"app"`
+	HTTP        HTTPConfig        `mapstructure:"http"`
+	DB          DBConfig          `mapstructure:"db"`
+	Log         LogConfig         `mapstructure:"log"`
+	Auth        AuthConfig        `mapstructure:"auth"`
+	Imports     ImportsConfig     `mapstructure:"imports"`
+	Hardening   HardeningConfig   `mapstructure:"hardening"`
+	Maintenance MaintenanceConfig `mapstructure:"maintenance"`
 }
 
 type AppConfig struct {
@@ -94,6 +95,14 @@ type HardeningConfig struct {
 	MetricsToken     string        `mapstructure:"metrics_token"`
 	IngestRateLimit  int           `mapstructure:"ingest_rate_limit"`
 	IngestRateWindow time.Duration `mapstructure:"ingest_rate_window"`
+}
+
+// MaintenanceConfig controls data retention. AuditLogRetention zero disables
+// audit pruning; RefreshTokenRetention zero disables refresh token pruning.
+type MaintenanceConfig struct {
+	AuditLogRetention     time.Duration `mapstructure:"audit_log_retention"`
+	RefreshTokenRetention time.Duration `mapstructure:"refresh_token_retention"`
+	Interval              time.Duration `mapstructure:"interval"`
 }
 
 func Load() (*Config, error) {
@@ -183,6 +192,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("hardening.metrics_token", "")
 	v.SetDefault("hardening.ingest_rate_limit", 600)
 	v.SetDefault("hardening.ingest_rate_window", time.Minute)
+
+	v.SetDefault("maintenance.audit_log_retention", 0)
+	v.SetDefault("maintenance.refresh_token_retention", 30*24*time.Hour)
+	v.SetDefault("maintenance.interval", 24*time.Hour)
 }
 
 func (c *Config) normalize() {
@@ -353,6 +366,16 @@ func (c *Config) Validate() error {
 	}
 	if c.Hardening.IngestRateWindow <= 0 {
 		return errors.New("hardening.ingest_rate_window must be greater than zero")
+	}
+
+	if c.Maintenance.AuditLogRetention < 0 {
+		return errors.New("maintenance.audit_log_retention must not be negative")
+	}
+	if c.Maintenance.RefreshTokenRetention < 0 {
+		return errors.New("maintenance.refresh_token_retention must not be negative")
+	}
+	if c.Maintenance.Interval <= 0 {
+		return errors.New("maintenance.interval must be greater than zero")
 	}
 
 	admin := c.Auth.BootstrapAdmin

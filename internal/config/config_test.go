@@ -51,6 +51,10 @@ hardening:
   metrics_token: metrics-secret
   ingest_rate_limit: 120
   ingest_rate_window: 30s
+maintenance:
+  audit_log_retention: 8760h
+  refresh_token_retention: 168h
+  interval: 6h
 `)
 	t.Setenv("CONFIG_FILE", path)
 
@@ -93,6 +97,11 @@ hardening:
 		cfg.Hardening.IngestRateLimit != 120 ||
 		cfg.Hardening.IngestRateWindow != 30*time.Second {
 		t.Fatalf("unexpected hardening config: %+v", cfg.Hardening)
+	}
+	if cfg.Maintenance.AuditLogRetention != 8760*time.Hour ||
+		cfg.Maintenance.RefreshTokenRetention != 168*time.Hour ||
+		cfg.Maintenance.Interval != 6*time.Hour {
+		t.Fatalf("unexpected maintenance config: %+v", cfg.Maintenance)
 	}
 }
 
@@ -162,6 +171,21 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			name:  "invalid ingest rate window",
 			yaml:  "auth:\n  jwt_secret: " + secret + "\nhardening:\n  ingest_rate_window: -1s\n",
 			error: "hardening.ingest_rate_window",
+		},
+		{
+			name:  "negative audit retention",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\nmaintenance:\n  audit_log_retention: -1h\n",
+			error: "maintenance.audit_log_retention",
+		},
+		{
+			name:  "negative refresh token retention",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\nmaintenance:\n  refresh_token_retention: -1h\n",
+			error: "maintenance.refresh_token_retention",
+		},
+		{
+			name:  "invalid maintenance interval",
+			yaml:  "auth:\n  jwt_secret: " + secret + "\nmaintenance:\n  interval: 0s\n",
+			error: "maintenance.interval",
 		},
 		{
 			name:  "invalid bcrypt cost",

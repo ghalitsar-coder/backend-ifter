@@ -53,3 +53,17 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
+
+const deleteAuditLogsBefore = `-- name: DeleteAuditLogsBefore :execrows
+DELETE FROM audit_logs
+WHERE created_at < $1
+`
+
+// Requires SET LOCAL ifter.audit_retention = 'on' in the same transaction.
+func (q *Queries) DeleteAuditLogsBefore(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuditLogsBefore, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

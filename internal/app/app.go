@@ -13,6 +13,7 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
 	disciplinepkg "github.com/ghalitsar-coder/backend-ifter/internal/discipline"
 	importservice "github.com/ghalitsar-coder/backend-ifter/internal/imports"
+	"github.com/ghalitsar-coder/backend-ifter/internal/maintenance"
 	"github.com/ghalitsar-coder/backend-ifter/internal/masterdata"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/database"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/logger"
@@ -71,6 +72,13 @@ func Run(ctx context.Context) error {
 
 	disciplineService := disciplinepkg.NewService(pool, log)
 	reportingService := reporting.NewService(pool, log)
+
+	maintenanceService := maintenance.NewService(pool, log, maintenance.Config{
+		AuditLogRetention:     cfg.Maintenance.AuditLogRetention,
+		RefreshTokenRetention: cfg.Maintenance.RefreshTokenRetention,
+		Interval:              cfg.Maintenance.Interval,
+	})
+	go maintenanceService.Run(ctx)
 
 	listener, err := net.Listen("tcp", cfg.HTTP.Addr())
 	if err != nil {
