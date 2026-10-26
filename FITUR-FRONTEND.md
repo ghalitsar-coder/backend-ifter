@@ -4,7 +4,7 @@ Dokumen handoff untuk agen/AI yang mengerjakan repo frontend
 (`frontend-ifter`). Window backend hanya membangun API; semua pekerjaan UI
 dicatat di sini agar bisa dikerjakan paralel tanpa menebak kontrak.
 
-Status terakhir: 2026-10-25.
+Status terakhir: 2026-10-26.
 
 ## Aturan umum
 
@@ -18,6 +18,21 @@ Status terakhir: 2026-10-25.
 - Gating role di frontend bersifat kosmetik; server tetap otoritatif.
 - Label domain ditulis hard-coded bahasa Indonesia (tidak menambah key locale
   baru), kecuali disebut lain.
+
+Kontrak akibat hardening backend (P1–P3, tidak butuh fitur baru, cukup pastikan
+error handler umum menangani ini):
+
+- Setiap request dibatasi 30 detik (`hardening.request_timeout`); kalau lewat,
+  server menjawab 504 `request_timeout`. Untuk GET, aman ditampilkan sebagai
+  "muat ulang / coba lagi"; jangan retry otomatis untuk mutation.
+- Rate limit in-process menghasilkan 429 `rate_limited` dengan header
+  `Retry-After` (detik): login/activate 30/menit per IP, ingest device
+  600/menit per IP. Tampilkan pesan "terlalu banyak percobaan, tunggu
+  N detik" bila ini terjadi.
+- Access token bisa menjadi tidak sah seketika saat password direset
+  (`token_version`), jadi 401 `unauthorized` bukan hanya berarti token
+  kedaluwarsa. Alur frontend tetap: 401 → coba refresh → refresh gagal →
+  clear sesi dan arahkan ke login.
 
 ---
 
@@ -507,6 +522,12 @@ Aturan ingest:
   lebih dari 5 menit di masa depan.
 - Batch 1–100 tap. Duplikat per `(device, card_uid, occurred_at)` diabaikan dan
   dihitung di `duplicates`, sehingga reader boleh mengulang batch.
+- Ingest dibatasi rate limit per IP (default 600 request/menit, body maks
+  128 KB). Melebihi batas → 429 `rate_limited` dengan header `Retry-After`;
+  reader cukup mengirim ulang batch yang sama setelah menunggu (idempoten,
+  baris lama dihitung sebagai `duplicates`). Beberapa reader di belakang satu
+  NAT sekolah memakai kuota IP yang sama — naikkan
+  `hardening.ingest_rate_limit` bila perlu.
 - Tap dengan kartu tak dikenal tetap disimpan (`unknown_cards`), agar bisa
   ditelusuri lewat log. Pemetaan kartu berlaku untuk tap berikutnya; tap lama
   tidak di-backfill.
