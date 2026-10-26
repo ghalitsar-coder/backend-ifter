@@ -77,7 +77,9 @@ Access token JWT berumur pendek dikirim di `Authorization: Bearer`; refresh
 token opaque disimpan sebagai hash di database dan dikirim lewat cookie
 `HttpOnly`, `SameSite=Strict`, `Secure` di production. Endpoint login dan
 aktivasi dibatasi rate limit per proses, dan endpoint yang memakai cookie
-memeriksa `Origin`.
+memeriksa `Origin`. Setiap token membawa `token_version` pengguna; reset atau
+aktivasi password menaikkan versi itu sehingga access token lama langsung
+ditolak tanpa menunggu kedaluwarsa.
 
 Akun baru dibuat tanpa password default. Token invite/reset hanya dikembalikan
 sekali kepada admin, disimpan di database sebagai hash, berlaku sekali, dan

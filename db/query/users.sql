@@ -1,18 +1,18 @@
 -- name: GetUserByUsername :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE lower(username) = lower(sqlc.arg(username))
 LIMIT 1;
 
 -- name: GetUserByEmail :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE email IS NOT NULL
   AND lower(email) = lower(sqlc.arg(email))
 LIMIT 1;
 
 -- name: GetUserByID :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE id = sqlc.arg(id);
 
@@ -34,7 +34,7 @@ VALUES (
   sqlc.arg(username), sqlc.narg(email), sqlc.arg(password_hash),
   sqlc.arg(full_name), sqlc.arg(status)
 )
-RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at;
+RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version;
 
 -- name: ListUsers :many
 SELECT id, username, email, full_name, status, last_login_at, created_at
@@ -59,7 +59,7 @@ VALUES (sqlc.arg(user_id), sqlc.arg(role_code), sqlc.narg(assigned_by))
 ON CONFLICT (user_id, role_code) DO NOTHING;
 
 -- name: GetUserByIDForUpdate :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE id = sqlc.arg(id)
 FOR UPDATE;
@@ -68,13 +68,13 @@ FOR UPDATE;
 UPDATE users
 SET status = sqlc.arg(status), updated_at = now()
 WHERE id = sqlc.arg(id)
-RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at;
+RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version;
 
 -- name: UpdateUserPassword :one
 UPDATE users
-SET password_hash = sqlc.arg(password_hash), updated_at = now()
+SET password_hash = sqlc.arg(password_hash), token_version = token_version + 1, updated_at = now()
 WHERE id = sqlc.arg(id)
-RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at;
+RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version;
 
 -- name: DeleteUserRoles :exec
 DELETE FROM user_roles

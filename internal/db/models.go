@@ -478,6 +478,7 @@ type User struct {
 	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	TokenVersion int32              `json:"token_version"`
 }
 
 type UserCredentialToken struct {

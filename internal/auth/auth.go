@@ -101,18 +101,28 @@ type TokenManager struct {
 	accessTTL time.Duration
 }
 
+// accessTokenClaims carries the user's token_version so Authenticate can
+// reject tokens issued before a password reset.
+type accessTokenClaims struct {
+	Version int `json:"ver"`
+	jwt.RegisteredClaims
+}
+
 func NewTokenManager(secret, issuer string, accessTTL time.Duration) *TokenManager {
 	return &TokenManager{secret: []byte(secret), issuer: issuer, accessTTL: accessTTL}
 }
 
-func (m *TokenManager) Issue(userID string) (string, time.Time, error) {
+func (m *TokenManager) Issue(userID string, tokenVersion int) (string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(m.accessTTL)
-	claims := jwt.RegisteredClaims{
-		Subject:   userID,
-		Issuer:    m.issuer,
-		IssuedAt:  jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(expiresAt),
+	claims := accessTokenClaims{
+		Version: tokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			Issuer:    m.issuer,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(m.secret)
@@ -122,8 +132,8 @@ func (m *TokenManager) Issue(userID string) (string, time.Time, error) {
 	return signed, expiresAt, nil
 }
 
-func (m *TokenManager) Parse(raw string) (string, error) {
-	claims := &jwt.RegisteredClaims{}
+func (m *TokenManager) Parse(raw string) (string, int, error) {
+	claims := &accessTokenClaims{}
 	token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
 		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, ErrUnauthorized
@@ -136,9 +146,9 @@ func (m *TokenManager) Parse(raw string) (string, error) {
 		jwt.WithLeeway(30*time.Second),
 	)
 	if err != nil || !token.Valid || claims.Subject == "" {
-		return "", ErrUnauthorized
+		return "", 0, ErrUnauthorized
 	}
-	return claims.Subject, nil
+	return claims.Subject, claims.Version, nil
 }
 
 func newOpaqueToken() (raw, hash string, err error) {

@@ -102,7 +102,7 @@ func (s *Service) Login(ctx context.Context, login, password, requestID string) 
 		return Session{}, err
 	}
 
-	accessToken, accessExpiresAt, err := s.tokens.Issue(formatUUID(user.ID))
+	accessToken, accessExpiresAt, err := s.tokens.Issue(formatUUID(user.ID), int(user.TokenVersion))
 	if err != nil {
 		return Session{}, err
 	}
@@ -122,6 +122,7 @@ func (s *Service) Refresh(ctx context.Context, rawToken, requestID string) (Sess
 
 	var authErr error
 	var user User
+	var tokenVersion int
 	var refreshToken string
 	var refreshExpiresAt time.Time
 
@@ -202,6 +203,7 @@ func (s *Service) Refresh(ctx context.Context, rawToken, requestID string) (Sess
 		}
 
 		user = toUser(currentUser, roles)
+		tokenVersion = int(currentUser.TokenVersion)
 		return nil
 	})
 	if err != nil {
@@ -211,7 +213,7 @@ func (s *Service) Refresh(ctx context.Context, rawToken, requestID string) (Sess
 		return Session{}, authErr
 	}
 
-	accessToken, accessExpiresAt, err := s.tokens.Issue(user.ID)
+	accessToken, accessExpiresAt, err := s.tokens.Issue(user.ID, tokenVersion)
 	if err != nil {
 		return Session{}, err
 	}
@@ -252,7 +254,7 @@ func (s *Service) Logout(ctx context.Context, rawToken, requestID string) error 
 }
 
 func (s *Service) Authenticate(ctx context.Context, accessToken string) (User, error) {
-	subject, err := s.tokens.Parse(accessToken)
+	subject, tokenVersion, err := s.tokens.Parse(accessToken)
 	if err != nil {
 		return User{}, ErrUnauthorized
 	}
@@ -268,7 +270,7 @@ func (s *Service) Authenticate(ctx context.Context, accessToken string) (User, e
 		}
 		return User{}, fmt.Errorf("find authenticated user: %w", err)
 	}
-	if user.Status != "active" {
+	if user.Status != "active" || int(user.TokenVersion) != tokenVersion {
 		return User{}, ErrUnauthorized
 	}
 	roles, err := s.queries.ListUserRoles(ctx, user.ID)

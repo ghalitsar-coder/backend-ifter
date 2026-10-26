@@ -9,7 +9,7 @@ import (
 func TestTokenManagerIssueAndParse(t *testing.T) {
 	manager := NewTokenManager("test-secret-at-least-32-characters-long", "test-issuer", 15*time.Minute)
 
-	token, expiresAt, err := manager.Issue("4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10")
+	token, expiresAt, err := manager.Issue("4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10", 3)
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
 	}
@@ -17,18 +17,21 @@ func TestTokenManagerIssueAndParse(t *testing.T) {
 		t.Fatal("Issue() returned an empty token or a past expiry")
 	}
 
-	subject, err := manager.Parse(token)
+	subject, version, err := manager.Parse(token)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
 	if subject != "4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10" {
 		t.Fatalf("Parse() subject = %q", subject)
 	}
+	if version != 3 {
+		t.Fatalf("Parse() version = %d, want 3", version)
+	}
 }
 
 func TestTokenManagerRejectsInvalidTokens(t *testing.T) {
 	manager := NewTokenManager("test-secret-at-least-32-characters-long", "test-issuer", 15*time.Minute)
-	valid, _, err := manager.Issue("4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10")
+	valid, _, err := manager.Issue("4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10", 0)
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
 	}
@@ -44,7 +47,7 @@ func TestTokenManagerRejectsInvalidTokens(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := tt.manager.Parse(tt.token); err == nil {
+			if _, _, err := tt.manager.Parse(tt.token); err == nil {
 				t.Fatal("Parse() error = nil, want error")
 			}
 		})
@@ -89,7 +92,7 @@ func TestPasswordHashing(t *testing.T) {
 
 func mustIssue(t *testing.T, manager *TokenManager) string {
 	t.Helper()
-	token, _, err := manager.Issue("4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10")
+	token, _, err := manager.Issue("4f0c1f8e-2d5f-4b7f-9a1f-4c3a9f8b2e10", 0)
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
 	}

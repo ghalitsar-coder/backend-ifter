@@ -372,6 +372,9 @@ func TestAccountManagementAPI(t *testing.T) {
 		}, "", nil, ""); rec.Code != http.StatusNoContent {
 			t.Fatalf("consume reset status = %d, body = %s", rec.Code, rec.Body.String())
 		}
+		if rec := env.request(t, http.MethodGet, "/api/v1/auth/me", nil, login.AccessToken, nil, ""); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("access token after password reset status = %d, body = %s", rec.Code, rec.Body.String())
+		}
 		if rec := env.request(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
 			"login": "roles-flow", "password": "role-password",
 		}, "", nil, testFrontendURL); rec.Code != http.StatusUnauthorized {

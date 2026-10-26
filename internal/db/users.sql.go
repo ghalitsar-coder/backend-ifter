@@ -74,7 +74,7 @@ VALUES (
   $1, $2, $3,
   $4, $5
 )
-RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 `
 
 type CreateUserParams struct {
@@ -104,6 +104,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -119,7 +120,7 @@ func (q *Queries) DeleteUserRoles(ctx context.Context, userID pgtype.UUID) error
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE email IS NOT NULL
   AND lower(email) = lower($1)
@@ -139,12 +140,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE id = $1
 `
@@ -162,12 +164,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE id = $1
 FOR UPDATE
@@ -186,12 +189,13 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id pgtype.UUID) (Use
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+SELECT id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 FROM users
 WHERE lower(username) = lower($1)
 LIMIT 1
@@ -210,6 +214,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -342,9 +347,9 @@ func (q *Queries) UpdateLastLogin(ctx context.Context, id pgtype.UUID) error {
 
 const updateUserPassword = `-- name: UpdateUserPassword :one
 UPDATE users
-SET password_hash = $1, updated_at = now()
+SET password_hash = $1, token_version = token_version + 1, updated_at = now()
 WHERE id = $2
-RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 `
 
 type UpdateUserPasswordParams struct {
@@ -365,6 +370,7 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPassword
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -373,7 +379,7 @@ const updateUserStatus = `-- name: UpdateUserStatus :one
 UPDATE users
 SET status = $1, updated_at = now()
 WHERE id = $2
-RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, full_name, status, last_login_at, created_at, updated_at, token_version
 `
 
 type UpdateUserStatusParams struct {
@@ -394,6 +400,7 @@ func (q *Queries) UpdateUserStatus(ctx context.Context, arg UpdateUserStatusPara
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
