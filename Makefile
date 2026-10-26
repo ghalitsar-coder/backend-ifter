@@ -1,3 +1,8 @@
+# Variabel dari .env lokal menang atas shell lama yang mungkin masih menyimpan
+# nilai basi (mis. IFTER_DB_PORT dari sumber .env sebelum perubahan port).
+-include .env
+export
+
 DATABASE_URL ?= postgres://ifter:ifter@localhost:5433/ifter?sslmode=disable
 DB_USER ?= ifter
 DB_NAME ?= ifter
