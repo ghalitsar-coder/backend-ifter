@@ -9,10 +9,9 @@ E2E_PORT="${E2E_PORT:-8081}"
 E2E_ADMIN_USER="${E2E_ADMIN_USER:-e2e-admin}"
 E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-E2eAdminPass123!}"
 # External database overrides. When E2E_PG_CONTAINER is set, the script uses an
-# already-running Postgres container instead of `docker compose up postgres`
-# (useful when host port 5432 is taken by another project).
+# already-running Postgres container instead of `docker compose up postgres`.
 E2E_PG_HOST="${E2E_PG_HOST:-localhost}"
-E2E_PG_PORT="${E2E_PG_PORT:-5432}"
+E2E_PG_PORT="${E2E_PG_PORT:-5433}"
 E2E_PG_USER="${E2E_PG_USER:-ifter}"
 E2E_PG_PASSWORD="${E2E_PG_PASSWORD:-ifter}"
 E2E_PG_CONTAINER="${E2E_PG_CONTAINER:-}"

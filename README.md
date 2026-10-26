@@ -460,7 +460,7 @@ sudah hidup:
 
 ```bash
 cd e2e
-API_URL=http://127.0.0.1:8080 npx e2e run
+API_URL=http://127.0.0.1:8082 npx e2e run
 ```
 
 Jangan arahkan e2e ke database development atau produksi: suite ini membuat,

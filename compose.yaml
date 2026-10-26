@@ -6,7 +6,9 @@ services:
       POSTGRES_PASSWORD: ifter
       POSTGRES_DB: ifter
     ports:
-      - "5432:5432"
+      # Host 5433 supaya tidak bentrok dengan PostgreSQL lokal/proyek lain di 5432.
+      - "5433:5432"
+    restart: unless-stopped
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

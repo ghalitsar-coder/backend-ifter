@@ -1,4 +1,4 @@
-DATABASE_URL ?= postgres://ifter:ifter@localhost:5432/ifter?sslmode=disable
+DATABASE_URL ?= postgres://ifter:ifter@localhost:5433/ifter?sslmode=disable
 DB_USER ?= ifter
 DB_NAME ?= ifter
 BACKUP_DIR ?= backups
