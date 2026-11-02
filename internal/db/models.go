@@ -58,16 +58,6 @@ type ClassSubject struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type DisciplineInspection struct {
-	ID              int64     `json:"id"`
-	ClassID         int64     `json:"class_id"`
-	InspectorID     int64     `json:"inspector_id"`
-	Tanggal         time.Time `json:"tanggal"`
-	JumlahDiperiksa int32     `json:"jumlah_diperiksa"`
-	Catatan         *string   `json:"catatan"`
-	CreatedAt       time.Time `json:"created_at"`
-}
-
 type Holiday struct {
 	ID             int64     `json:"id"`
 	AcademicYearID int64     `json:"academic_year_id"`
@@ -186,17 +176,6 @@ type StudentAttendanceRecap struct {
 	CreatedAt       time.Time      `json:"created_at"`
 }
 
-type StudentViolation struct {
-	ID              int64     `json:"id"`
-	InspectionID    int64     `json:"inspection_id"`
-	StudentID       int64     `json:"student_id"`
-	ViolationTypeID int64     `json:"violation_type_id"`
-	Poin            int32     `json:"poin"`
-	Keterangan      *string   `json:"keterangan"`
-	TindakLanjut    *string   `json:"tindak_lanjut"`
-	CreatedAt       time.Time `json:"created_at"`
-}
-
 type Subject struct {
 	ID        int64     `json:"id"`
 	Kode      string    `json:"kode"`
@@ -219,14 +198,4 @@ type UserRole struct {
 	UserID    int64     `json:"user_id"`
 	RoleID    int64     `json:"role_id"`
 	CreatedAt time.Time `json:"created_at"`
-}
-
-type ViolationType struct {
-	ID          int64     `json:"id"`
-	Kode        string    `json:"kode"`
-	Nama        string    `json:"nama"`
-	Kategori    string    `json:"kategori"`
-	PoinDefault int32     `json:"poin_default"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
 }
