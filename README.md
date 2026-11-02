@@ -63,10 +63,15 @@ no HTTP or SQL details.
 
 ```bash
 cp configs/config.example.yaml configs/config.yaml   # or: cp .env.example .env
-docker compose up -d postgres
-make migrate-up
-docker compose exec -T postgres psql -U app -d app < db/seed/demo.sql   # local demo data
-make run
+make dev
+```
+
+`make dev` starts Postgres, waits until it accepts connections, applies
+migrations, loads the demo seeds, and runs the API. Safe to re-run. Optional
+volume fixtures stay manual:
+
+```bash
+docker compose exec -T postgres psql -U app -d app < db/seed/dev-volume.sql
 ```
 
 Sign in with the seeded guru (`db/seed/demo.sql` stores the password
@@ -207,5 +212,7 @@ committed so builds do not need the generator.
   another tenant behaves like a missing one (`404`, or `403` for a session
   write). Registration writes the school, admin user, staff row, and `admin`
   role in one statement; a duplicate NPSN or email rolls the whole thing back.
-- **Demo login.** `db/seed/demo.sql` stores `guru123` for `guru1`/`tu1`; the
-  seeded school uses NPSN `00000000`. These are fixtures, not a bootstrap path.
+- **Demo login.** `db/seed/demo.sql` stores `guru123` for `guru1`/`tu1`, and
+  `db/seed/demo-roles.sql` adds `kepsek1` (`kepala_sekolah`) and `kesiswaan1`
+  (`kesiswaan`) to the same school. The seeded school uses NPSN `00000000`.
+  These are fixtures, not a bootstrap path.

@@ -4,13 +4,25 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 
 DATABASE_URL ?= postgres://app:app@localhost:5432/app?sslmode=disable
 
-.PHONY: help run build test test-integration fmt fmt-check vet lint tidy check tools db-up db-down migrate-up migrate-down migrate-create sqlc token
+.PHONY: help run dev build test test-integration fmt fmt-check vet lint tidy check tools db-up db-down migrate-up migrate-down migrate-create sqlc token
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-18s %s\n", $$1, $$2}'
 
 run: ## Run the API locally, loading .env when present
 	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; go run ./cmd/api
+
+dev: ## One command: start Postgres, migrate, seed demo data, run the API
+	docker compose up -d postgres
+	@printf 'waiting for postgres'; \
+	until docker compose exec -T postgres pg_isready -U app -d app >/dev/null 2>&1; do \
+		printf '.'; sleep 1; \
+	done; echo ' ready'
+	migrate -path db/migrations -database "$(DATABASE_URL)" up
+	@docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d app < db/seed/demo.sql >/dev/null
+	@docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U app -d app < db/seed/demo-roles.sql >/dev/null
+	@echo 'API on http://localhost:8080 (guru1/guru123, tu1, kepsek1, kesiswaan1)'
+	@$(MAKE) --no-print-directory run
 
 build: ## Build the API binary into bin/
 	go build -trimpath -ldflags "-s -w -X $(MODULE)/internal/app.Version=$(VERSION)" -o bin/$(APP_NAME) ./cmd/api
