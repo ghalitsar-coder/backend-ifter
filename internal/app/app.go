@@ -10,6 +10,7 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/attendance"
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
+	"github.com/ghalitsar-coder/backend-ifter/internal/discipline"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/database"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/logger"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
@@ -42,6 +43,7 @@ func Run(ctx context.Context) error {
 	m.RegisterDBPool(pool)
 
 	attendanceService := attendance.NewService(attendance.NewPostgresRepository(pool))
+	disciplineService := discipline.NewService(discipline.NewPostgresRepository(pool))
 	tokens := auth.NewTokenService(cfg.Auth)
 	authRepo := auth.NewPostgresRepository(pool)
 	loginService := auth.NewLoginService(authRepo, tokens, cfg.Auth.AccessTokenTTL)
@@ -56,6 +58,7 @@ func Run(ctx context.Context) error {
 		Auth:       loginService,
 		Register:   registerService,
 		Attendance: attendanceService,
+		Discipline: disciplineService,
 		Version:    Version,
 	})
 

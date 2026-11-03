@@ -11,6 +11,7 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/attendance"
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
+	"github.com/ghalitsar-coder/backend-ifter/internal/discipline"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/response"
@@ -30,6 +31,7 @@ type Deps struct {
 	Auth       *auth.LoginService
 	Register   *auth.RegisterService
 	Attendance *attendance.Service
+	Discipline *discipline.Service
 	Version    string
 }
 
@@ -96,18 +98,33 @@ func New(d Deps) *gin.Engine {
 		}
 	}
 
-	// Secured group: every attendance route below requires a signed-in user.
-	if d.Attendance != nil && d.Tokens != nil {
+	// Secured group: every attendance and discipline route below requires a signed-in user.
+	if d.Tokens != nil {
 		secured := v1.Group("")
 		secured.Use(middleware.Authenticate(d.Tokens, d.Logger))
 
-		attendanceHandler := newAttendanceHandler(d.Attendance, d.Logger)
-		write := middleware.RequireRoles("guru", "tu", "admin")
-		secured.GET("/classes", attendanceHandler.ListClasses)
-		secured.POST("/attendance-sessions", write, attendanceHandler.CreateSession)
-		secured.GET("/attendance-sessions/:id", attendanceHandler.GetSession)
-		secured.PUT("/attendance-sessions/:id/attendances", write, attendanceHandler.Record)
-		secured.POST("/attendance-sessions/:id/lock", write, attendanceHandler.Lock)
+		if d.Attendance != nil {
+			attendanceHandler := newAttendanceHandler(d.Attendance, d.Logger)
+			write := middleware.RequireRoles("guru", "tu", "admin")
+			secured.GET("/classes", attendanceHandler.ListClasses)
+			secured.POST("/attendance-sessions", write, attendanceHandler.CreateSession)
+			secured.GET("/attendance-sessions/:id", attendanceHandler.GetSession)
+			secured.PUT("/attendance-sessions/:id/attendances", write, attendanceHandler.Record)
+			secured.POST("/attendance-sessions/:id/lock", write, attendanceHandler.Lock)
+		}
+
+		if d.Discipline != nil {
+			disciplineHandler := newDisciplineHandler(d.Discipline, d.Logger)
+			writeDiscipline := middleware.RequireRoles("guru", "kesiswaan", "admin")
+			secured.GET("/discipline/types", disciplineHandler.ListViolationTypes)
+			secured.GET("/discipline/records", disciplineHandler.ListViolations)
+			secured.POST("/discipline/records", writeDiscipline, disciplineHandler.RecordViolation)
+			secured.PATCH("/discipline/records/:id/followup", writeDiscipline, disciplineHandler.UpdateFollowup)
+			secured.GET("/discipline/inspections", disciplineHandler.ListInspections)
+			secured.POST("/discipline/inspections", writeDiscipline, disciplineHandler.CreateInspection)
+			secured.GET("/discipline/students/:id/summary", disciplineHandler.GetStudentSummary)
+			secured.GET("/discipline/classes/:id/students", disciplineHandler.ListClassStudents)
+		}
 
 		secured.GET("/admin/ping", middleware.RequireRoles("admin"), func(c *gin.Context) {
 			response.JSON(c, http.StatusOK, gin.H{"status": "ok"})

@@ -113,7 +113,7 @@ func normalizeRegistration(in RegisterInput) (RegisterInput, error) {
 		!npsnPattern.MatchString(in.NPSN) ||
 		len(in.Email) > 254 || !emailPattern.MatchString(in.Email) ||
 		len(in.Phone) < 9 || len(in.Phone) > 14 ||
-		!(strings.HasPrefix(in.Phone, "0") || strings.HasPrefix(in.Phone, "62")) ||
+		(!strings.HasPrefix(in.Phone, "0") && !strings.HasPrefix(in.Phone, "62")) ||
 		len(in.Password) < 8 || len(in.Password) > 72 {
 		return RegisterInput{}, ErrInvalidRegistration
 	}
