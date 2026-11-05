@@ -158,6 +158,16 @@ All responses use one envelope:
 | POST | `/v1/attendance-sessions` | Bearer + `guru`/`tu`/`admin` | Create (or fetch) a session; idempotent per class/date/subject |
 | PUT | `/v1/attendance-sessions/:id/attendances` | Bearer + `guru`/`tu`/`admin` | Upsert student statuses (`hadir`, `sakit`, `izin`, `alpa`) |
 | POST | `/v1/attendance-sessions/:id/lock` | Bearer + `guru`/`tu`/`admin` | Lock the session; later writes return `409` |
+| POST | `/v1/recaps/students` | Bearer + `tu`/`admin` | Generate or refresh monthly student recap drafts; JSON body: `{"bulan":10,"tahun":2026}` |
+| GET | `/v1/recaps/students?bulan=10&tahun=2026` | Bearer + `tu`/`admin` | List school-scoped monthly student recap snapshots |
+| POST | `/v1/recaps/students/:id/verify` | Bearer + `tu`/`admin` | Verify and lock a draft recap; locked snapshots cannot be regenerated |
+| POST | `/v1/recaps/staff` | Bearer + `tu`/`admin` | Generate or refresh monthly staff recap drafts; JSON body: `{"bulan":10,"tahun":2026}` |
+| GET | `/v1/recaps/staff?bulan=10&tahun=2026` | Bearer + `tu`/`admin` | List school-scoped monthly staff attendance recaps |
+| POST | `/v1/recaps/staff/:id/verify` | Bearer + `tu`/`admin` | Verify and lock a staff recap; locked snapshots cannot be regenerated |
+
+Staff recap workdays are weekdays (Monday-Friday) minus dates entered in the
+school holiday calendar. `hadir` and `terlambat` count toward the attendance
+percentage.
 | GET | `/v1/admin/ping` | Bearer + `admin` role | RBAC example |
 
 ## Adding a module
@@ -202,8 +212,8 @@ committed so builds do not need the generator.
 - **Migrations are a separate step.** The app never mutates the schema on boot;
   `compose.yaml` runs a one-shot migrate service.
 - **Student attendance scope.** Sessions, per-student statuses, roster reads, and
-  locking are implemented. Monthly `student_attendance_recaps` snapshots are not
-  generated yet; add a recap job when TU reporting is needed.
+  locking are implemented. TU/admin can generate, list, and verify monthly
+  `student_attendance_recaps` and `staff_attendance_recaps` snapshots.
 - **Attendance identity.** The JWT subject is the numeric `users.id`; it is
   resolved to `staff.user_id`. `tu`/`admin` may record for any class, `guru` only
   for classes they teach or are wali kelas of.

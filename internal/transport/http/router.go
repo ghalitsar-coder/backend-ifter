@@ -12,6 +12,7 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
+	"github.com/ghalitsar-coder/backend-ifter/internal/recap"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/response"
 )
@@ -30,6 +31,7 @@ type Deps struct {
 	Auth       *auth.LoginService
 	Register   *auth.RegisterService
 	Attendance *attendance.Service
+	Recaps     *recap.Service
 	Version    string
 }
 
@@ -112,6 +114,18 @@ func New(d Deps) *gin.Engine {
 		secured.GET("/admin/ping", middleware.RequireRoles("admin"), func(c *gin.Context) {
 			response.JSON(c, http.StatusOK, gin.H{"status": "ok"})
 		})
+	}
+	if d.Recaps != nil && d.Tokens != nil {
+		secured := v1.Group("")
+		secured.Use(middleware.Authenticate(d.Tokens, d.Logger))
+		recapHandler := newRecapHandler(d.Recaps, d.Logger)
+		tu := middleware.RequireRoles("tu", "admin")
+		secured.POST("/recaps/students", tu, recapHandler.GenerateStudentRecaps)
+		secured.GET("/recaps/students", tu, recapHandler.ListStudentRecaps)
+		secured.POST("/recaps/students/:id/verify", tu, recapHandler.VerifyStudentRecap)
+		secured.POST("/recaps/staff", tu, recapHandler.GenerateStaffRecaps)
+		secured.GET("/recaps/staff", tu, recapHandler.ListStaffRecaps)
+		secured.POST("/recaps/staff/:id/verify", tu, recapHandler.VerifyStaffRecap)
 	}
 
 	r.NoRoute(func(c *gin.Context) {

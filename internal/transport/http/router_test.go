@@ -19,6 +19,7 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
+	"github.com/ghalitsar-coder/backend-ifter/internal/recap"
 )
 
 func testLogger() *slog.Logger {
@@ -255,6 +256,98 @@ func TestRouterLoginRejectsBadPassword(t *testing.T) {
 	}
 	if body.Error.Code != "invalid_credentials" {
 		t.Errorf("error.code = %q, want invalid_credentials", body.Error.Code)
+	}
+}
+
+type routeRecapRepository struct{}
+
+func (routeRecapRepository) GenerateStudentRecaps(context.Context, int64, int16, int16) error {
+	return nil
+}
+
+func (routeRecapRepository) ListStudentRecaps(context.Context, int64, int16, int16) ([]recap.StudentRecap, error) {
+	return []recap.StudentRecap{}, nil
+}
+
+func (routeRecapRepository) StudentRecapStatus(context.Context, int64, int64) (string, error) {
+	return "draft", nil
+}
+
+func (routeRecapRepository) VerifyStudentRecap(context.Context, int64, int64, int64) (recap.Verification, error) {
+	return recap.Verification{}, nil
+}
+
+func (routeRecapRepository) GenerateStaffRecaps(context.Context, int64, int16, int16) error {
+	return nil
+}
+
+func (routeRecapRepository) ListStaffRecaps(context.Context, int64, int16, int16) ([]recap.StaffRecap, error) {
+	return []recap.StaffRecap{}, nil
+}
+
+func (routeRecapRepository) StaffRecapStatus(context.Context, int64, int64) (string, error) {
+	return "draft", nil
+}
+
+func (routeRecapRepository) VerifyStaffRecap(context.Context, int64, int64, int64) (recap.Verification, error) {
+	return recap.Verification{}, nil
+}
+
+func TestStudentRecapRoutesRequireTUOrAdmin(t *testing.T) {
+	deps := testAuthDeps(t)
+	deps.Recaps = recap.NewService(routeRecapRepository{})
+	router := New(deps)
+
+	var login struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/auth/login", `{"username":"guru1","password":"guru123"}`, ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &login); err != nil {
+		t.Fatalf("decode login: %v", err)
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/recaps/students", `{"bulan":10,"tahun":2026}`, "Bearer "+login.Data.Token))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guru recap status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodGet, "/v1/recaps/students?bulan=10&tahun=2026", "", ""))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous recap status = %d, want %d: %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+}
+
+func TestStaffRecapRoutesRequireTUOrAdmin(t *testing.T) {
+	deps := testAuthDeps(t)
+	deps.Recaps = recap.NewService(routeRecapRepository{})
+	router := New(deps)
+
+	var login struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/auth/login", `{"username":"guru1","password":"guru123"}`, ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &login); err != nil {
+		t.Fatalf("decode login: %v", err)
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/recaps/staff", `{"bulan":10,"tahun":2026}`, "Bearer "+login.Data.Token))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guru recap status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
 }
 

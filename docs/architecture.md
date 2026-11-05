@@ -9,6 +9,7 @@ cmd/api
         │     ├── middleware
         │     └── response
         ├── internal/attendance   (service + repository + domain types)
+        ├── internal/recap        (TU student and staff attendance recap workflows)
         ├── internal/auth       (token, login and registration services)
         ├── internal/config
         └── internal/platform   (database, logger, metrics)
