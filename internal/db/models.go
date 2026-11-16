@@ -79,6 +79,7 @@ type QrSession struct {
 	RotasiDetik    int32       `json:"rotasi_detik"`
 	Status         string      `json:"status"`
 	CreatedAt      time.Time   `json:"created_at"`
+	SchoolID       int64       `json:"school_id"`
 }
 
 type Role struct {

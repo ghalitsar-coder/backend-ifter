@@ -10,6 +10,7 @@ cmd/api
         │     └── response
         ├── internal/attendance   (service + repository + domain types)
         ├── internal/recap        (TU student and staff attendance recap workflows)
+        ├── internal/qrattendance (TU QR sessions and staff check-in/out)
         ├── internal/auth       (token, login and registration services)
         ├── internal/config
         └── internal/platform   (database, logger, metrics)

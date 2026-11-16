@@ -12,6 +12,7 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
+	"github.com/ghalitsar-coder/backend-ifter/internal/qrattendance"
 	"github.com/ghalitsar-coder/backend-ifter/internal/recap"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/middleware"
 	"github.com/ghalitsar-coder/backend-ifter/internal/transport/http/response"
@@ -23,16 +24,17 @@ type Readiness interface {
 }
 
 type Deps struct {
-	Config     *config.Config
-	Logger     *slog.Logger
-	Metrics    *metrics.Metrics
-	Readiness  Readiness
-	Tokens     middleware.TokenParser
-	Auth       *auth.LoginService
-	Register   *auth.RegisterService
-	Attendance *attendance.Service
-	Recaps     *recap.Service
-	Version    string
+	Config       *config.Config
+	Logger       *slog.Logger
+	Metrics      *metrics.Metrics
+	Readiness    Readiness
+	Tokens       middleware.TokenParser
+	Auth         *auth.LoginService
+	Register     *auth.RegisterService
+	Attendance   *attendance.Service
+	Recaps       *recap.Service
+	QRAttendance *qrattendance.Service
+	Version      string
 }
 
 func New(d Deps) *gin.Engine {
@@ -126,6 +128,16 @@ func New(d Deps) *gin.Engine {
 		secured.POST("/recaps/staff", tu, recapHandler.GenerateStaffRecaps)
 		secured.GET("/recaps/staff", tu, recapHandler.ListStaffRecaps)
 		secured.POST("/recaps/staff/:id/verify", tu, recapHandler.VerifyStaffRecap)
+	}
+	if d.QRAttendance != nil && d.Tokens != nil {
+		secured := v1.Group("")
+		secured.Use(middleware.Authenticate(d.Tokens, d.Logger))
+		qrHandler := newQRAttendanceHandler(d.QRAttendance, d.Logger)
+		tu := middleware.RequireRoles("tu")
+		secured.POST("/staff/qr-sessions", tu, qrHandler.CreateSession)
+		secured.GET("/staff/qr-sessions/:id/code", tu, qrHandler.CurrentCode)
+		secured.POST("/staff/qr-sessions/:id/close", tu, qrHandler.CloseSession)
+		secured.POST("/staff/attendance/scan", qrHandler.Scan)
 	}
 
 	r.NoRoute(func(c *gin.Context) {
