@@ -19,6 +19,8 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
+	"github.com/ghalitsar-coder/backend-ifter/internal/qrattendance"
+	"github.com/ghalitsar-coder/backend-ifter/internal/recap"
 )
 
 func testLogger() *slog.Logger {
@@ -255,6 +257,169 @@ func TestRouterLoginRejectsBadPassword(t *testing.T) {
 	}
 	if body.Error.Code != "invalid_credentials" {
 		t.Errorf("error.code = %q, want invalid_credentials", body.Error.Code)
+	}
+}
+
+type routeRecapRepository struct{}
+
+func (routeRecapRepository) GenerateStudentRecaps(context.Context, int64, int16, int16) error {
+	return nil
+}
+
+func (routeRecapRepository) ListStudentRecaps(context.Context, int64, int16, int16) ([]recap.StudentRecap, error) {
+	return []recap.StudentRecap{}, nil
+}
+
+func (routeRecapRepository) StudentRecapStatus(context.Context, int64, int64) (string, error) {
+	return "draft", nil
+}
+
+func (routeRecapRepository) VerifyStudentRecap(context.Context, int64, int64, int64) (recap.Verification, error) {
+	return recap.Verification{}, nil
+}
+
+func (routeRecapRepository) GenerateStaffRecaps(context.Context, int64, int16, int16) error {
+	return nil
+}
+
+func (routeRecapRepository) ListStaffRecaps(context.Context, int64, int16, int16) ([]recap.StaffRecap, error) {
+	return []recap.StaffRecap{}, nil
+}
+
+func (routeRecapRepository) StaffRecapStatus(context.Context, int64, int64) (string, error) {
+	return "draft", nil
+}
+
+func (routeRecapRepository) VerifyStaffRecap(context.Context, int64, int64, int64) (recap.Verification, error) {
+	return recap.Verification{}, nil
+}
+
+func TestStudentRecapRoutesRequireTUOrAdmin(t *testing.T) {
+	deps := testAuthDeps(t)
+	deps.Recaps = recap.NewService(routeRecapRepository{})
+	router := New(deps)
+
+	var login struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/auth/login", `{"username":"guru1","password":"guru123"}`, ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &login); err != nil {
+		t.Fatalf("decode login: %v", err)
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/recaps/students", `{"bulan":10,"tahun":2026}`, "Bearer "+login.Data.Token))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guru recap status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodGet, "/v1/recaps/students?bulan=10&tahun=2026", "", ""))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous recap status = %d, want %d: %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+}
+
+func TestStaffRecapRoutesRequireTUOrAdmin(t *testing.T) {
+	deps := testAuthDeps(t)
+	deps.Recaps = recap.NewService(routeRecapRepository{})
+	router := New(deps)
+
+	var login struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/auth/login", `{"username":"guru1","password":"guru123"}`, ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &login); err != nil {
+		t.Fatalf("decode login: %v", err)
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/recaps/staff", `{"bulan":10,"tahun":2026}`, "Bearer "+login.Data.Token))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guru recap status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+type routeQRRepository struct{}
+
+func (routeQRRepository) CreateSession(_ context.Context, schoolID, creatorID int64, secret string, input qrattendance.CreateSessionInput, date time.Time, openAt, closeAt string, lateAfter *string) (qrattendance.SessionRecord, error) {
+	return qrattendance.SessionRecord{
+		Session:  qrattendance.Session{ID: 1, Date: date.Format("2006-01-02"), Type: input.Type, OpenAt: openAt, CloseAt: closeAt, LateAfter: lateAfter, RotationSeconds: 30, Status: "aktif"},
+		SchoolID: schoolID, CreatedBy: creatorID, TokenSecret: secret,
+	}, nil
+}
+
+func (routeQRRepository) GetSession(context.Context, int64, int64) (qrattendance.SessionRecord, error) {
+	return qrattendance.SessionRecord{}, nil
+}
+
+func (routeQRRepository) CloseSession(context.Context, int64, int64) error             { return nil }
+func (routeQRRepository) FindActiveStaff(context.Context, int64, int64) (int64, error) { return 1, nil }
+func (routeQRRepository) CheckIn(context.Context, int64, int64, time.Time, time.Time, string) error {
+	return nil
+}
+func (routeQRRepository) CheckOut(context.Context, int64, int64, time.Time, time.Time) error {
+	return nil
+}
+
+func TestQRSessionCreationRequiresTUOrAdmin(t *testing.T) {
+	deps := testAuthDeps(t)
+	deps.QRAttendance = qrattendance.NewService(routeQRRepository{})
+	secret := strings.Repeat("q", 32)
+	tokens := auth.NewTokenService(config.AuthConfig{JWTSecret: secret, JWTIssuer: "test-issuer", JWTAudience: "test-audience", AccessTokenTTL: time.Hour})
+	deps.Tokens = tokens
+	teacherToken, err := tokens.Issue("1", []string{"guru"}, 1)
+	if err != nil {
+		t.Fatalf("issue teacher token: %v", err)
+	}
+	tuToken, err := tokens.Issue("2", []string{"tu"}, 1)
+	if err != nil {
+		t.Fatalf("issue TU token: %v", err)
+	}
+	adminToken, err := tokens.Issue("3", []string{"admin"}, 1)
+	if err != nil {
+		t.Fatalf("issue admin token: %v", err)
+	}
+	router := New(deps)
+	body := `{"tanggal":"2097-11-16","tipe_sesi":"masuk","jam_buka":"07:00","jam_tutup":"09:00"}`
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/staff/qr-sessions", body, "Bearer "+teacherToken))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guru create QR status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/staff/qr-sessions", body, "Bearer "+adminToken))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("admin create QR status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/staff/qr-sessions", body, "Bearer "+tuToken))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("TU create QR status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "token_secret") || strings.Contains(rec.Body.String(), "TokenSecret") {
+		t.Fatalf("QR session response leaked its secret: %s", rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/staff/attendance/scan", `{"payload":"bad"}`, ""))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous scan status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
 

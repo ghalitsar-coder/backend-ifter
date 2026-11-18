@@ -14,6 +14,8 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/database"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/logger"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
+	"github.com/ghalitsar-coder/backend-ifter/internal/qrattendance"
+	"github.com/ghalitsar-coder/backend-ifter/internal/recap"
 	httptransport "github.com/ghalitsar-coder/backend-ifter/internal/transport/http"
 )
 
@@ -44,22 +46,26 @@ func Run(ctx context.Context) error {
 
 	attendanceService := attendance.NewService(attendance.NewPostgresRepository(pool))
 	disciplineService := discipline.NewService(discipline.NewPostgresRepository(pool))
+	recapService := recap.NewService(recap.NewPostgresRepository(pool))
+	qrAttendanceService := qrattendance.NewService(qrattendance.NewPostgresRepository(pool))
 	tokens := auth.NewTokenService(cfg.Auth)
 	authRepo := auth.NewPostgresRepository(pool)
 	loginService := auth.NewLoginService(authRepo, tokens, cfg.Auth.AccessTokenTTL)
 	registerService := auth.NewRegisterService(authRepo, tokens, cfg.Auth.AccessTokenTTL)
 
 	handler := httptransport.New(httptransport.Deps{
-		Config:     cfg,
-		Logger:     log,
-		Metrics:    m,
-		Readiness:  pool,
-		Tokens:     tokens,
-		Auth:       loginService,
-		Register:   registerService,
-		Attendance: attendanceService,
-		Discipline: disciplineService,
-		Version:    Version,
+		Config:       cfg,
+		Logger:       log,
+		Metrics:      m,
+		Readiness:    pool,
+		Tokens:       tokens,
+		Auth:         loginService,
+		Register:     registerService,
+		Attendance:   attendanceService,
+		Discipline:   disciplineService,
+		Recaps:       recapService,
+		QRAttendance: qrAttendanceService,
+		Version:      Version,
 	})
 
 	server := &http.Server{
