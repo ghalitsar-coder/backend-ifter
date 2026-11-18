@@ -152,7 +152,9 @@ func (h *qrAttendanceHandler) writeError(c *gin.Context, err error) {
 	case errors.Is(err, qrattendance.ErrOutsideWindow):
 		response.Error(c, http.StatusConflict, "outside_window", "QR session is outside its attendance window")
 	case errors.Is(err, qrattendance.ErrInvalidCode):
-		response.Error(c, http.StatusUnprocessableEntity, "invalid_qr", "QR code is invalid or expired")
+		response.Error(c, http.StatusUnprocessableEntity, "invalid_qr", "QR code is invalid")
+	case errors.Is(err, qrattendance.ErrExpiredCode):
+		response.Error(c, http.StatusUnprocessableEntity, "expired_qr", "QR code has expired")
 	case errors.Is(err, qrattendance.ErrAlreadyScanned):
 		response.Error(c, http.StatusConflict, "already_scanned", "check-in is already recorded for today")
 	case errors.Is(err, qrattendance.ErrCheckInRequired):

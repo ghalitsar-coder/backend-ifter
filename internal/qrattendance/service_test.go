@@ -139,8 +139,16 @@ func TestCurrentCodeAndScanValidateRotatingSignature(t *testing.T) {
 	}
 
 	stalePayload := signPayload(session.ID, now.Unix()/30-1, session.TokenSecret)
-	if _, err := svc.Scan(context.Background(), ScanInput{UserID: 7, SchoolID: session.SchoolID, Payload: stalePayload}); !errors.Is(err, ErrInvalidCode) {
-		t.Fatalf("stale Scan() error = %v, want ErrInvalidCode", err)
+	if _, err := svc.Scan(context.Background(), ScanInput{UserID: 7, SchoolID: session.SchoolID, Payload: stalePayload}); !errors.Is(err, ErrExpiredCode) {
+		t.Fatalf("stale Scan() error = %v, want ErrExpiredCode", err)
+	}
+	now = now.Add(29 * time.Second) // 07:30:44, fourteen seconds into the next slot.
+	if _, err := svc.Scan(context.Background(), ScanInput{UserID: 7, SchoolID: session.SchoolID, Payload: code.Payload}); err != nil {
+		t.Fatalf("photo submitted during grace: %v", err)
+	}
+	now = now.Add(time.Second)
+	if _, err := svc.Scan(context.Background(), ScanInput{UserID: 7, SchoolID: session.SchoolID, Payload: code.Payload}); !errors.Is(err, ErrExpiredCode) {
+		t.Fatalf("photo submitted after grace: %v", err)
 	}
 }
 

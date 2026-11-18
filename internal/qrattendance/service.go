@@ -116,7 +116,7 @@ func (s *Service) CurrentCode(ctx context.Context, id, schoolID int64) (QRCode, 
 		}
 	}
 	payload := signPayload(session.ID, slot, session.TokenSecret)
-	png, err := qrcode.Encode(payload, qrcode.Medium, 256)
+	png, err := qrcode.Encode(payload, qrcode.Medium, 512)
 	if err != nil {
 		return QRCode{}, fmt.Errorf("encode attendance QR: %w", err)
 	}
@@ -148,6 +148,9 @@ func (s *Service) Scan(ctx context.Context, input ScanInput) (ScanResult, error)
 		return ScanResult{}, err
 	}
 	if !validSlot(session, slot, now) {
+		if session.RotationSeconds > 0 && slot < now.Unix()/int64(session.RotationSeconds) {
+			return ScanResult{}, ErrExpiredCode
+		}
 		return ScanResult{}, ErrInvalidCode
 	}
 	staffID, err := s.repo.FindActiveStaff(ctx, input.UserID, input.SchoolID)
@@ -277,5 +280,6 @@ func validSlot(session SessionRecord, slot int64, now time.Time) bool {
 		return slot == 0
 	}
 	current := now.Unix() / rotation
-	return slot == current
+	// Allow a photo taken just before rotation to reach the server.
+	return slot == current || (slot == current-1 && now.Unix()%rotation < 15)
 }
