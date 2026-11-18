@@ -10,12 +10,46 @@ import (
 )
 
 type fakeRepository struct {
+	findOpenFn func(context.Context, int64, time.Time, string) (SessionRecord, error)
 	createFn   func(context.Context, int64, int64, string, CreateSessionInput, time.Time, string, string, *string) (SessionRecord, error)
 	getFn      func(context.Context, int64, int64) (SessionRecord, error)
 	closeFn    func(context.Context, int64, int64) error
 	staffFn    func(context.Context, int64, int64) (int64, error)
 	checkInFn  func(context.Context, int64, int64, time.Time, time.Time, string) error
 	checkOutFn func(context.Context, int64, int64, time.Time, time.Time) error
+}
+
+func (f fakeRepository) FindOpenSession(ctx context.Context, schoolID int64, date time.Time, clock string) (SessionRecord, error) {
+	return f.findOpenFn(ctx, schoolID, date, clock)
+}
+
+func TestActiveSessionUsesSchoolAndLocalClock(t *testing.T) {
+	now := time.Date(2026, 11, 19, 7, 30, 0, 0, time.FixedZone("WIB", 7*60*60))
+	svc := NewService(fakeRepository{
+		findOpenFn: func(_ context.Context, schoolID int64, date time.Time, clock string) (SessionRecord, error) {
+			if schoolID != 2 || date.Format(dateLayout) != "2026-11-19" || clock != "07:30:00" {
+				t.Fatalf("lookup = school %d/date %s/clock %s", schoolID, date, clock)
+			}
+			return SessionRecord{Session: Session{ID: 9, Status: "aktif"}, TokenSecret: "hidden"}, nil
+		},
+	})
+	svc.now = func() time.Time { return now }
+	session, err := svc.ActiveSession(context.Background(), 2)
+	if err != nil || session == nil || session.ID != 9 {
+		t.Fatalf("ActiveSession() = %+v, %v", session, err)
+	}
+}
+
+func TestActiveSessionReturnsNilWithoutOpenSession(t *testing.T) {
+	svc := NewService(fakeRepository{
+		findOpenFn: func(context.Context, int64, time.Time, string) (SessionRecord, error) {
+			return SessionRecord{}, pgx.ErrNoRows
+		},
+	})
+	session, err := svc.ActiveSession(context.Background(), 1)
+	if session != nil || err != nil {
+		t.Fatalf("ActiveSession() = %+v, %v; want nil, nil", session, err)
+	}
 }
 
 func (f fakeRepository) CreateSession(ctx context.Context, schoolID, creatorID int64, secret string, input CreateSessionInput, date time.Time, openAt, closeAt string, lateAfter *string) (SessionRecord, error) {

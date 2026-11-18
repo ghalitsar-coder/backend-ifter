@@ -18,6 +18,16 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{queries: db.New(pool)}
 }
 
+func (r *PostgresRepository) FindOpenSession(ctx context.Context, schoolID int64, date time.Time, clock string) (SessionRecord, error) {
+	id, err := r.queries.FindOpenQRSession(ctx, db.FindOpenQRSessionParams{
+		SchoolID: schoolID, Tanggal: date, Clock: clock,
+	})
+	if err != nil {
+		return SessionRecord{}, err
+	}
+	return r.GetSession(ctx, id, schoolID)
+}
+
 func (r *PostgresRepository) CreateSession(ctx context.Context, schoolID, creatorID int64, secret string, input CreateSessionInput, date time.Time, openAt, closeAt string, lateAfter *string) (SessionRecord, error) {
 	rotation := int32(30)
 	if input.RotationSeconds != nil {

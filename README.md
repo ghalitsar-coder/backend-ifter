@@ -165,6 +165,7 @@ All responses use one envelope:
 | GET | `/v1/recaps/staff?bulan=10&tahun=2026` | Bearer + `tu`/`admin` | List school-scoped monthly staff attendance recaps |
 | POST | `/v1/recaps/staff/:id/verify` | Bearer + `tu`/`admin` | Verify and lock a staff recap; locked snapshots cannot be regenerated |
 | POST | `/v1/staff/qr-sessions` | Bearer + `tu` | Create a staff check-in/out QR session; body includes `tanggal`, `tipe_sesi` (`masuk`/`pulang`), `jam_buka`, `jam_tutup`, optional `batas_terlambat`, and optional `rotasi_detik` (default 30; `0` disables rotation) |
+| GET | `/v1/staff/qr-sessions/active` | Bearer + `tu` | Restore the school's running session or next scheduled session; returns `data: null` when none remains open |
 | GET | `/v1/staff/qr-sessions/:id/code` | Bearer + `tu` | Get current signed rotating QR payload and PNG data URI while the session is open |
 | POST | `/v1/staff/attendance/scan` | Bearer + active staff account | Record check-in/out from `{"payload":"..."}`; one check-in per staff per date |
 | POST | `/v1/staff/qr-sessions/:id/close` | Bearer + `tu` | Close a QR session immediately |

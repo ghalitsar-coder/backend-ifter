@@ -50,6 +50,34 @@ func TestPostgresQRAttendanceIntegration(t *testing.T) {
 	if err != nil || loaded.ID != session.ID || loaded.LateAfter == nil || *loaded.LateAfter != lateAfter {
 		t.Fatalf("GetSession() = %+v, %v", loaded, err)
 	}
+	for _, clock := range []string{"06:00:00", "08:00:00"} {
+		open, err := repo.FindOpenSession(ctx, schoolID, date, clock)
+		if err != nil || open.ID != session.ID {
+			t.Fatalf("FindOpenSession(%s) = %+v, %v", clock, open, err)
+		}
+	}
+	if _, err := repo.FindOpenSession(ctx, 999, date, "08:00:00"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("FindOpenSession(other school) error = %v, want ErrNoRows", err)
+	}
+	if _, err := repo.FindOpenSession(ctx, schoolID, date, "09:01:00"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("FindOpenSession(expired) error = %v, want ErrNoRows", err)
+	}
+	checkoutInput := CreateSessionInput{Date: date.Format(dateLayout), Type: "pulang"}
+	checkout, err := repo.CreateSession(ctx, schoolID, creatorID, "checkout-test-secret", checkoutInput, date, "10:00:00", "11:00:00", nil)
+	if err != nil {
+		t.Fatalf("CreateSession(checkout) error = %v", err)
+	}
+	open, err := repo.FindOpenSession(ctx, schoolID, date, "08:00:00")
+	if err != nil || open.ID != session.ID {
+		t.Fatalf("FindOpenSession() = %+v, %v; want running check-in", open, err)
+	}
+	open, err = repo.FindOpenSession(ctx, schoolID, date, "09:30:00")
+	if err != nil || open.ID != checkout.ID {
+		t.Fatalf("FindOpenSession() = %+v, %v; want next checkout", open, err)
+	}
+	if err := repo.CloseSession(ctx, checkout.ID, schoolID); err != nil {
+		t.Fatalf("CloseSession(checkout) error = %v", err)
+	}
 	if staff, err := repo.FindActiveStaff(ctx, 2, schoolID); err != nil || staff != staffID {
 		t.Fatalf("FindActiveStaff() = %d, %v; want %d", staff, err, staffID)
 	}
@@ -77,5 +105,8 @@ func TestPostgresQRAttendanceIntegration(t *testing.T) {
 	loaded, err = repo.GetSession(ctx, session.ID, schoolID)
 	if err != nil || loaded.Status != "selesai" {
 		t.Fatalf("closed session = %+v, %v; want selesai", loaded, err)
+	}
+	if _, err := repo.FindOpenSession(ctx, schoolID, date, "08:00:00"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("FindOpenSession(closed) error = %v, want ErrNoRows", err)
 	}
 }

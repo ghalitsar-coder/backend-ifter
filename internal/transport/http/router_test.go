@@ -354,6 +354,10 @@ func TestStaffRecapRoutesRequireTUOrAdmin(t *testing.T) {
 
 type routeQRRepository struct{}
 
+func (routeQRRepository) FindOpenSession(_ context.Context, schoolID int64, _ time.Time, _ string) (qrattendance.SessionRecord, error) {
+	return qrattendance.SessionRecord{Session: qrattendance.Session{ID: 1, Status: "aktif"}, SchoolID: schoolID, TokenSecret: "hidden"}, nil
+}
+
 func (routeQRRepository) CreateSession(_ context.Context, schoolID, creatorID int64, secret string, input qrattendance.CreateSessionInput, date time.Time, openAt, closeAt string, lateAfter *string) (qrattendance.SessionRecord, error) {
 	return qrattendance.SessionRecord{
 		Session:  qrattendance.Session{ID: 1, Date: date.Format("2006-01-02"), Type: input.Type, OpenAt: openAt, CloseAt: closeAt, LateAfter: lateAfter, RotationSeconds: 30, Status: "aktif"},
@@ -394,6 +398,22 @@ func TestQRSessionCreationRequiresTUOrAdmin(t *testing.T) {
 	}
 	router := New(deps)
 	body := `{"tanggal":"2097-11-16","tipe_sesi":"masuk","jam_buka":"07:00","jam_tutup":"09:00"}`
+
+	for _, testCase := range []struct {
+		token  string
+		status int
+	}{
+		{"", http.StatusUnauthorized},
+		{teacherToken, http.StatusForbidden},
+		{adminToken, http.StatusForbidden},
+		{tuToken, http.StatusOK},
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, jsonRequest(http.MethodGet, "/v1/staff/qr-sessions/active", "", "Bearer "+testCase.token))
+		if rec.Code != testCase.status || strings.Contains(rec.Body.String(), "hidden") {
+			t.Fatalf("active session status = %d, want %d: %s", rec.Code, testCase.status, rec.Body.String())
+		}
+	}
 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/staff/qr-sessions", body, "Bearer "+teacherToken))
