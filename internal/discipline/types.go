@@ -42,9 +42,10 @@ type Actor struct {
 	Roles    []string
 }
 
-func (a Actor) IsAdminOrKesiswaan() bool {
+// IsKesiswaan reports whether the authenticated caller holds the kesiswaan role.
+func (a Actor) IsKesiswaan() bool {
 	for _, r := range a.Roles {
-		if r == "admin" || r == "kesiswaan" {
+		if r == "kesiswaan" {
 			return true
 		}
 	}

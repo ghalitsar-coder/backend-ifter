@@ -13,16 +13,23 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
+func (s *Service) authorize(actor Actor) error {
+	if actor.SchoolID <= 0 || !actor.IsKesiswaan() {
+		return ErrForbidden
+	}
+	return nil
+}
+
 func (s *Service) ListViolationTypes(ctx context.Context, actor Actor) ([]ViolationType, error) {
-	if actor.SchoolID <= 0 {
-		return nil, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return nil, err
 	}
 	return s.repo.ListViolationTypes(ctx, actor.SchoolID)
 }
 
 func (s *Service) RecordViolation(ctx context.Context, actor Actor, in RecordViolationInput) (StudentViolation, error) {
-	if actor.SchoolID <= 0 {
-		return StudentViolation{}, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return StudentViolation{}, err
 	}
 	if in.StudentID <= 0 {
 		return StudentViolation{}, ErrInvalidStudent
@@ -53,15 +60,15 @@ func (s *Service) RecordViolation(ctx context.Context, actor Actor, in RecordVio
 }
 
 func (s *Service) ListViolations(ctx context.Context, actor Actor, filter ListViolationsFilter) ([]StudentViolation, error) {
-	if actor.SchoolID <= 0 {
-		return nil, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return nil, err
 	}
 	return s.repo.ListViolations(ctx, actor.SchoolID, filter)
 }
 
 func (s *Service) GetStudentSummary(ctx context.Context, actor Actor, studentID int64) (StudentSummary, error) {
-	if actor.SchoolID <= 0 {
-		return StudentSummary{}, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return StudentSummary{}, err
 	}
 	if studentID <= 0 {
 		return StudentSummary{}, ErrInvalidStudent
@@ -70,8 +77,8 @@ func (s *Service) GetStudentSummary(ctx context.Context, actor Actor, studentID 
 }
 
 func (s *Service) UpdateFollowup(ctx context.Context, actor Actor, id int64, followup string) (StudentViolation, error) {
-	if actor.SchoolID <= 0 {
-		return StudentViolation{}, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return StudentViolation{}, err
 	}
 	if id <= 0 {
 		return StudentViolation{}, ErrNotFound
@@ -80,8 +87,8 @@ func (s *Service) UpdateFollowup(ctx context.Context, actor Actor, id int64, fol
 }
 
 func (s *Service) CreateInspection(ctx context.Context, actor Actor, in CreateInspectionInput) (DisciplineInspection, error) {
-	if actor.SchoolID <= 0 {
-		return DisciplineInspection{}, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return DisciplineInspection{}, err
 	}
 	if in.ClassID <= 0 {
 		return DisciplineInspection{}, ErrInvalidClass
@@ -126,15 +133,15 @@ func (s *Service) CreateInspection(ctx context.Context, actor Actor, in CreateIn
 }
 
 func (s *Service) ListInspections(ctx context.Context, actor Actor, filter ListInspectionsFilter) ([]DisciplineInspection, error) {
-	if actor.SchoolID <= 0 {
-		return nil, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return nil, err
 	}
 	return s.repo.ListInspections(ctx, actor.SchoolID, filter)
 }
 
 func (s *Service) ListClassStudents(ctx context.Context, actor Actor, classID int64) ([]ClassStudent, error) {
-	if actor.SchoolID <= 0 {
-		return nil, ErrForbidden
+	if err := s.authorize(actor); err != nil {
+		return nil, err
 	}
 	if classID <= 0 {
 		return nil, ErrInvalidClass
