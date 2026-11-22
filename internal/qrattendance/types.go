@@ -76,6 +76,7 @@ type ScanResult struct {
 }
 
 type Repository interface {
+	FindOpenSession(ctx context.Context, schoolID int64, date time.Time, clock string) (SessionRecord, error)
 	CreateSession(ctx context.Context, schoolID, creatorID int64, secret string, input CreateSessionInput, date time.Time, openAt, closeAt string, lateAfter *string) (SessionRecord, error)
 	GetSession(ctx context.Context, id, schoolID int64) (SessionRecord, error)
 	CloseSession(ctx context.Context, id, schoolID int64) error

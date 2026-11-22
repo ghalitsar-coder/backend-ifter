@@ -23,6 +23,19 @@ func newQRAttendanceHandler(service *qrattendance.Service, log *slog.Logger) *qr
 	return &qrAttendanceHandler{service: service, log: log}
 }
 
+func (h *qrAttendanceHandler) ActiveSession(c *gin.Context) {
+	_, schoolID, ok := qrActor(c)
+	if !ok {
+		return
+	}
+	session, err := h.service.ActiveSession(c.Request.Context(), schoolID)
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
+	response.JSON(c, http.StatusOK, session)
+}
+
 func (h *qrAttendanceHandler) CreateSession(c *gin.Context) {
 	userID, schoolID, ok := qrActor(c)
 	if !ok {

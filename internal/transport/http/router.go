@@ -152,6 +152,7 @@ func New(d Deps) *gin.Engine {
 		qrHandler := newQRAttendanceHandler(d.QRAttendance, d.Logger)
 		tu := middleware.RequireRoles("tu")
 		secured.POST("/staff/qr-sessions", tu, qrHandler.CreateSession)
+		secured.GET("/staff/qr-sessions/active", tu, qrHandler.ActiveSession)
 		secured.GET("/staff/qr-sessions/:id/code", tu, qrHandler.CurrentCode)
 		secured.POST("/staff/qr-sessions/:id/close", tu, qrHandler.CloseSession)
 		secured.POST("/staff/attendance/scan", qrHandler.Scan)

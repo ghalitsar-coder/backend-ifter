@@ -27,6 +27,22 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo, now: time.Now}
 }
 
+func (s *Service) ActiveSession(ctx context.Context, schoolID int64) (*Session, error) {
+	if schoolID <= 0 {
+		return nil, ErrForbidden
+	}
+	now := s.now()
+	date := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	session, err := s.repo.FindOpenSession(ctx, schoolID, date, now.Format("15:04:05"))
+	if database.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find active QR session: %w", err)
+	}
+	return &session.Session, nil
+}
+
 func (s *Service) CreateSession(ctx context.Context, creator SessionCreator, input CreateSessionInput) (Session, error) {
 	if creator.UserID <= 0 || creator.SchoolID <= 0 {
 		return Session{}, ErrForbidden

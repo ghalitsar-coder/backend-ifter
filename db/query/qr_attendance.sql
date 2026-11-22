@@ -31,6 +31,17 @@ SELECT
 FROM qr_sessions
 WHERE id = sqlc.arg(id) AND school_id = sqlc.arg(school_id);
 
+-- name: FindOpenQRSession :one
+SELECT id
+FROM qr_sessions
+WHERE school_id = sqlc.arg(school_id)
+  AND status = 'aktif'
+  AND (tanggal > sqlc.arg(tanggal) OR
+       (tanggal = sqlc.arg(tanggal) AND jam_tutup >= sqlc.arg(clock)::text::time))
+ORDER BY (tanggal = sqlc.arg(tanggal) AND jam_buka <= sqlc.arg(clock)::text::time) DESC,
+         tanggal, jam_buka, created_at DESC, id DESC
+LIMIT 1;
+
 -- name: FindActiveStaffForSchool :one
 SELECT st.id
 FROM staff st

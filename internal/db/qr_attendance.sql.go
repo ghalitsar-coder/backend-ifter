@@ -140,6 +140,31 @@ func (q *Queries) FindActiveStaffForSchool(ctx context.Context, arg FindActiveSt
 	return id, err
 }
 
+const findOpenQRSession = `-- name: FindOpenQRSession :one
+SELECT id
+FROM qr_sessions
+WHERE school_id = $1
+  AND status = 'aktif'
+  AND (tanggal > $2 OR
+       (tanggal = $2 AND jam_tutup >= $3::text::time))
+ORDER BY (tanggal = $2 AND jam_buka <= $3::text::time) DESC,
+         tanggal, jam_buka, created_at DESC, id DESC
+LIMIT 1
+`
+
+type FindOpenQRSessionParams struct {
+	SchoolID int64     `json:"school_id"`
+	Tanggal  time.Time `json:"tanggal"`
+	Clock    string    `json:"clock"`
+}
+
+func (q *Queries) FindOpenQRSession(ctx context.Context, arg FindOpenQRSessionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, findOpenQRSession, arg.SchoolID, arg.Tanggal, arg.Clock)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getQRSession = `-- name: GetQRSession :one
 SELECT
     id, school_id, created_by, token_qr, tanggal, tipe_sesi,
