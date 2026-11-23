@@ -8,17 +8,17 @@ import (
 )
 
 type fakeDisciplineRepo struct {
-	staffIDFn           func(ctx context.Context, userID int64) (int64, error)
-	classInSchoolFn     func(ctx context.Context, classID, schoolID int64) (bool, error)
-	listViolationTypesFn func(ctx context.Context, schoolID int64) ([]ViolationType, error)
+	staffIDFn              func(ctx context.Context, userID int64) (int64, error)
+	classInSchoolFn        func(ctx context.Context, classID, schoolID int64) (bool, error)
+	listViolationTypesFn   func(ctx context.Context, schoolID int64) ([]ViolationType, error)
 	getViolationTypeByIDFn func(ctx context.Context, id, schoolID int64) (ViolationType, error)
-	recordViolationFn   func(ctx context.Context, schoolID int64, in RecordViolationInput, poin int32, tanggal time.Time) (StudentViolation, error)
-	listViolationsFn    func(ctx context.Context, schoolID int64, filter ListViolationsFilter) ([]StudentViolation, error)
-	getStudentSummaryFn func(ctx context.Context, schoolID, studentID int64) (StudentSummary, error)
-	updateFollowupFn    func(ctx context.Context, schoolID, id int64, followup string) (StudentViolation, error)
-	createInspectionFn  func(ctx context.Context, schoolID, inspectorID int64, in CreateInspectionInput, tanggal time.Time, defaultPoints map[int64]int32) (DisciplineInspection, error)
-	listInspectionsFn   func(ctx context.Context, schoolID int64, filter ListInspectionsFilter) ([]DisciplineInspection, error)
-	listClassStudentsFn func(ctx context.Context, schoolID, classID int64) ([]ClassStudent, error)
+	recordViolationFn      func(ctx context.Context, schoolID int64, in RecordViolationInput, poin int32, tanggal time.Time) (StudentViolation, error)
+	listViolationsFn       func(ctx context.Context, schoolID int64, filter ListViolationsFilter) ([]StudentViolation, error)
+	getStudentSummaryFn    func(ctx context.Context, schoolID, studentID int64) (StudentSummary, error)
+	updateFollowupFn       func(ctx context.Context, schoolID, id int64, followup string) (StudentViolation, error)
+	createInspectionFn     func(ctx context.Context, schoolID, inspectorID int64, in CreateInspectionInput, tanggal time.Time, defaultPoints map[int64]int32) (DisciplineInspection, error)
+	listInspectionsFn      func(ctx context.Context, schoolID int64, filter ListInspectionsFilter) ([]DisciplineInspection, error)
+	listClassStudentsFn    func(ctx context.Context, schoolID, classID int64) ([]ClassStudent, error)
 }
 
 func (f *fakeDisciplineRepo) StaffIDByUserID(ctx context.Context, userID int64) (int64, error) {
@@ -100,9 +100,47 @@ func (f *fakeDisciplineRepo) ListClassStudents(ctx context.Context, schoolID, cl
 
 func TestListViolationTypes_RequiresSchool(t *testing.T) {
 	svc := NewService(&fakeDisciplineRepo{})
-	_, err := svc.ListViolationTypes(context.Background(), Actor{SchoolID: 0})
+	_, err := svc.ListViolationTypes(context.Background(), Actor{SchoolID: 0, Roles: []string{"kesiswaan"}})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestDisciplineService_RequiresKesiswaanRole(t *testing.T) {
+	svc := NewService(&fakeDisciplineRepo{})
+	ctx := context.Background()
+
+	for _, role := range []string{"guru", "admin", "tu", "kepala_sekolah", ""} {
+		var roles []string
+		if role != "" {
+			roles = []string{role}
+		}
+		actor := Actor{UserID: 1, SchoolID: 1, Roles: roles}
+
+		if _, err := svc.ListViolationTypes(ctx, actor); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q ListViolationTypes: expected ErrForbidden, got %v", role, err)
+		}
+		if _, err := svc.ListViolations(ctx, actor, ListViolationsFilter{}); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q ListViolations: expected ErrForbidden, got %v", role, err)
+		}
+		if _, err := svc.RecordViolation(ctx, actor, RecordViolationInput{StudentID: 1, ViolationTypeID: 1, Tanggal: "2026-10-24"}); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q RecordViolation: expected ErrForbidden, got %v", role, err)
+		}
+		if _, err := svc.UpdateFollowup(ctx, actor, 1, "test"); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q UpdateFollowup: expected ErrForbidden, got %v", role, err)
+		}
+		if _, err := svc.CreateInspection(ctx, actor, CreateInspectionInput{ClassID: 1, Tanggal: "2026-10-24"}); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q CreateInspection: expected ErrForbidden, got %v", role, err)
+		}
+		if _, err := svc.ListInspections(ctx, actor, ListInspectionsFilter{}); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q ListInspections: expected ErrForbidden, got %v", role, err)
+		}
+		if _, err := svc.GetStudentSummary(ctx, actor, 1); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q GetStudentSummary: expected ErrForbidden, got %v", role, err)
+		}
+		if _, err := svc.ListClassStudents(ctx, actor, 1); !errors.Is(err, ErrForbidden) {
+			t.Errorf("role %q ListClassStudents: expected ErrForbidden, got %v", role, err)
+		}
 	}
 }
 

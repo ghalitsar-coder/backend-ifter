@@ -119,15 +119,15 @@ func New(d Deps) *gin.Engine {
 
 		if d.Discipline != nil {
 			disciplineHandler := newDisciplineHandler(d.Discipline, d.Logger)
-			writeDiscipline := middleware.RequireRoles("guru", "kesiswaan", "admin")
-			secured.GET("/discipline/types", disciplineHandler.ListViolationTypes)
-			secured.GET("/discipline/records", disciplineHandler.ListViolations)
-			secured.POST("/discipline/records", writeDiscipline, disciplineHandler.RecordViolation)
-			secured.PATCH("/discipline/records/:id/followup", writeDiscipline, disciplineHandler.UpdateFollowup)
-			secured.GET("/discipline/inspections", disciplineHandler.ListInspections)
-			secured.POST("/discipline/inspections", writeDiscipline, disciplineHandler.CreateInspection)
-			secured.GET("/discipline/students/:id/summary", disciplineHandler.GetStudentSummary)
-			secured.GET("/discipline/classes/:id/students", disciplineHandler.ListClassStudents)
+			kesiswaanOnly := middleware.RequireRoles("kesiswaan")
+			secured.GET("/discipline/types", kesiswaanOnly, disciplineHandler.ListViolationTypes)
+			secured.GET("/discipline/records", kesiswaanOnly, disciplineHandler.ListViolations)
+			secured.POST("/discipline/records", kesiswaanOnly, disciplineHandler.RecordViolation)
+			secured.PATCH("/discipline/records/:id/followup", kesiswaanOnly, disciplineHandler.UpdateFollowup)
+			secured.GET("/discipline/inspections", kesiswaanOnly, disciplineHandler.ListInspections)
+			secured.POST("/discipline/inspections", kesiswaanOnly, disciplineHandler.CreateInspection)
+			secured.GET("/discipline/students/:id/summary", kesiswaanOnly, disciplineHandler.GetStudentSummary)
+			secured.GET("/discipline/classes/:id/students", kesiswaanOnly, disciplineHandler.ListClassStudents)
 		}
 
 		secured.GET("/admin/ping", middleware.RequireRoles("admin"), func(c *gin.Context) {

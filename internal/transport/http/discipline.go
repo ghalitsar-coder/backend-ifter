@@ -172,10 +172,10 @@ func (h *disciplineHandler) UpdateFollowup(c *gin.Context) {
 }
 
 type createInspectionRequest struct {
-	ClassID         int64                                    `json:"class_id" binding:"required"`
-	Tanggal         string                                   `json:"tanggal" binding:"required"`
-	JumlahDiperiksa int32                                    `json:"jumlah_diperiksa" binding:"required"`
-	Catatan         *string                                  `json:"catatan"`
+	ClassID         int64                                      `json:"class_id" binding:"required"`
+	Tanggal         string                                     `json:"tanggal" binding:"required"`
+	JumlahDiperiksa int32                                      `json:"jumlah_diperiksa" binding:"required"`
+	Catatan         *string                                    `json:"catatan"`
 	Violations      []discipline.CreateInspectionViolationItem `json:"violations"`
 }
 

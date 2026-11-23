@@ -18,6 +18,7 @@ import (
 	"github.com/ghalitsar-coder/backend-ifter/internal/attendance"
 	"github.com/ghalitsar-coder/backend-ifter/internal/auth"
 	"github.com/ghalitsar-coder/backend-ifter/internal/config"
+	"github.com/ghalitsar-coder/backend-ifter/internal/discipline"
 	"github.com/ghalitsar-coder/backend-ifter/internal/platform/metrics"
 	"github.com/ghalitsar-coder/backend-ifter/internal/qrattendance"
 	"github.com/ghalitsar-coder/backend-ifter/internal/recap"
@@ -440,6 +441,133 @@ func TestQRSessionCreationRequiresTUOrAdmin(t *testing.T) {
 	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/v1/staff/attendance/scan", `{"payload":"bad"}`, ""))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous scan status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+type routeDisciplineRepository struct{}
+
+func (routeDisciplineRepository) StaffIDByUserID(context.Context, int64) (int64, error) {
+	return 1, nil
+}
+func (routeDisciplineRepository) ClassInSchool(context.Context, int64, int64) (bool, error) {
+	return true, nil
+}
+func (routeDisciplineRepository) ListViolationTypes(context.Context, int64) ([]discipline.ViolationType, error) {
+	return []discipline.ViolationType{{ID: 1, SchoolID: 1, Kode: "ATR-01", Nama: "Seragam", PoinDefault: 3}}, nil
+}
+func (routeDisciplineRepository) GetViolationTypeByID(context.Context, int64, int64) (discipline.ViolationType, error) {
+	return discipline.ViolationType{ID: 1, SchoolID: 1, Kode: "ATR-01", Nama: "Seragam", PoinDefault: 3}, nil
+}
+func (routeDisciplineRepository) RecordViolation(_ context.Context, schoolID int64, in discipline.RecordViolationInput, poin int32, _ time.Time) (discipline.StudentViolation, error) {
+	return discipline.StudentViolation{ID: 1, SchoolID: schoolID, StudentID: in.StudentID, Poin: poin}, nil
+}
+func (routeDisciplineRepository) ListViolations(context.Context, int64, discipline.ListViolationsFilter) ([]discipline.StudentViolation, error) {
+	return []discipline.StudentViolation{}, nil
+}
+func (routeDisciplineRepository) GetStudentSummary(_ context.Context, _ int64, studentID int64) (discipline.StudentSummary, error) {
+	return discipline.StudentSummary{StudentID: studentID}, nil
+}
+func (routeDisciplineRepository) UpdateFollowup(_ context.Context, schoolID, id int64, followup string) (discipline.StudentViolation, error) {
+	return discipline.StudentViolation{ID: id, SchoolID: schoolID, TindakLanjut: &followup}, nil
+}
+func (routeDisciplineRepository) CreateInspectionWithViolations(_ context.Context, schoolID, inspectorID int64, in discipline.CreateInspectionInput, _ time.Time, _ map[int64]int32) (discipline.DisciplineInspection, error) {
+	return discipline.DisciplineInspection{ID: 1, SchoolID: schoolID, ClassID: in.ClassID, InspectorID: inspectorID}, nil
+}
+func (routeDisciplineRepository) ListInspections(context.Context, int64, discipline.ListInspectionsFilter) ([]discipline.DisciplineInspection, error) {
+	return []discipline.DisciplineInspection{}, nil
+}
+func (routeDisciplineRepository) ListClassStudents(context.Context, int64, int64) ([]discipline.ClassStudent, error) {
+	return []discipline.ClassStudent{}, nil
+}
+
+func TestDisciplineRoutesRequireKesiswaan(t *testing.T) {
+	deps := testAuthDeps(t)
+	deps.Discipline = discipline.NewService(routeDisciplineRepository{})
+	secret := strings.Repeat("d", 32)
+	tokens := auth.NewTokenService(config.AuthConfig{JWTSecret: secret, JWTIssuer: "test-issuer", JWTAudience: "test-audience", AccessTokenTTL: time.Hour})
+	deps.Tokens = tokens
+
+	guruToken, err := tokens.Issue("1", []string{"guru"}, 1)
+	if err != nil {
+		t.Fatalf("issue guru token: %v", err)
+	}
+	adminToken, err := tokens.Issue("2", []string{"admin"}, 1)
+	if err != nil {
+		t.Fatalf("issue admin token: %v", err)
+	}
+	tuToken, err := tokens.Issue("3", []string{"tu"}, 1)
+	if err != nil {
+		t.Fatalf("issue tu token: %v", err)
+	}
+	kepsekToken, err := tokens.Issue("4", []string{"kepala_sekolah"}, 1)
+	if err != nil {
+		t.Fatalf("issue kepsek token: %v", err)
+	}
+	kesiswaanToken, err := tokens.Issue("5", []string{"kesiswaan"}, 1)
+	if err != nil {
+		t.Fatalf("issue kesiswaan token: %v", err)
+	}
+
+	router := New(deps)
+	recordBody := `{"student_id":1,"violation_type_id":1,"tanggal":"2026-11-22"}`
+	inspectionBody := `{"class_id":1,"tanggal":"2026-11-22","jumlah_diperiksa":25,"violations":[]}`
+	followupBody := `{"tindak_lanjut":"Pembinaan"}`
+
+	denied := []struct {
+		name  string
+		token string
+	}{
+		{"guru", guruToken},
+		{"admin", adminToken},
+		{"tu", tuToken},
+		{"kepala_sekolah", kepsekToken},
+	}
+
+	for _, actor := range denied {
+		endpoints := []struct {
+			method string
+			path   string
+			body   string
+		}{
+			{http.MethodGet, "/v1/discipline/types", ""},
+			{http.MethodGet, "/v1/discipline/records", ""},
+			{http.MethodPost, "/v1/discipline/records", recordBody},
+			{http.MethodPatch, "/v1/discipline/records/1/followup", followupBody},
+			{http.MethodGet, "/v1/discipline/inspections", ""},
+			{http.MethodPost, "/v1/discipline/inspections", inspectionBody},
+			{http.MethodGet, "/v1/discipline/students/1/summary", ""},
+			{http.MethodGet, "/v1/discipline/classes/1/students", ""},
+		}
+		for _, ep := range endpoints {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, jsonRequest(ep.method, ep.path, ep.body, "Bearer "+actor.token))
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("%s %s %s = %d, want %d: %s", actor.name, ep.method, ep.path, rec.Code, http.StatusForbidden, rec.Body.String())
+			}
+		}
+	}
+
+	allowed := []struct {
+		method string
+		path   string
+		body   string
+		want   int
+	}{
+		{http.MethodGet, "/v1/discipline/types", "", http.StatusOK},
+		{http.MethodGet, "/v1/discipline/records", "", http.StatusOK},
+		{http.MethodPost, "/v1/discipline/records", recordBody, http.StatusCreated},
+		{http.MethodPatch, "/v1/discipline/records/1/followup", followupBody, http.StatusOK},
+		{http.MethodGet, "/v1/discipline/inspections", "", http.StatusOK},
+		{http.MethodPost, "/v1/discipline/inspections", inspectionBody, http.StatusCreated},
+		{http.MethodGet, "/v1/discipline/students/1/summary", "", http.StatusOK},
+		{http.MethodGet, "/v1/discipline/classes/1/students", "", http.StatusOK},
+	}
+	for _, ep := range allowed {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, jsonRequest(ep.method, ep.path, ep.body, "Bearer "+kesiswaanToken))
+		if rec.Code != ep.want {
+			t.Errorf("kesiswaan %s %s = %d, want %d: %s", ep.method, ep.path, rec.Code, ep.want, rec.Body.String())
+		}
 	}
 }
 
