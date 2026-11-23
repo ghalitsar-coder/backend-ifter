@@ -58,6 +58,19 @@ type ClassSubject struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type CounselingRecord struct {
+	ID           int64     `json:"id"`
+	SchoolID     int64     `json:"school_id"`
+	StudentID    int64     `json:"student_id"`
+	CounselorID  *int64    `json:"counselor_id"`
+	Tanggal      time.Time `json:"tanggal"`
+	Topik        string    `json:"topik"`
+	Catatan      *string   `json:"catatan"`
+	TindakLanjut *string   `json:"tindak_lanjut"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
 type DisciplineInspection struct {
 	ID              int64     `json:"id"`
 	SchoolID        int64     `json:"school_id"`
@@ -76,6 +89,25 @@ type Holiday struct {
 	Keterangan     string    `json:"keterangan"`
 	Jenis          string    `json:"jenis"`
 	CreatedAt      time.Time `json:"created_at"`
+}
+
+type ParentSummon struct {
+	ID              int64              `json:"id"`
+	SchoolID        int64              `json:"school_id"`
+	StudentID       int64              `json:"student_id"`
+	CreatedBy       *int64             `json:"created_by"`
+	NomorSurat      string             `json:"nomor_surat"`
+	TanggalSurat    time.Time          `json:"tanggal_surat"`
+	JadwalPertemuan time.Time          `json:"jadwal_pertemuan"`
+	Ruangan         string             `json:"ruangan"`
+	Alasan          string             `json:"alasan"`
+	NamaOrtu        *string            `json:"nama_ortu"`
+	NoHpOrtu        *string            `json:"no_hp_ortu"`
+	Status          string             `json:"status"`
+	SentAt          pgtype.Timestamptz `json:"sent_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CatatanHasil    *string            `json:"catatan_hasil"`
+	CreatedAt       time.Time          `json:"created_at"`
 }
 
 type QrSession struct {

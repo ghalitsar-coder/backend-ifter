@@ -452,11 +452,23 @@ func (routeDisciplineRepository) StaffIDByUserID(context.Context, int64) (int64,
 func (routeDisciplineRepository) ClassInSchool(context.Context, int64, int64) (bool, error) {
 	return true, nil
 }
-func (routeDisciplineRepository) ListViolationTypes(context.Context, int64) ([]discipline.ViolationType, error) {
+func (routeDisciplineRepository) StudentInSchool(context.Context, int64, int64) (bool, error) {
+	return true, nil
+}
+func (routeDisciplineRepository) ListViolationTypes(context.Context, int64, bool) ([]discipline.ViolationType, error) {
 	return []discipline.ViolationType{{ID: 1, SchoolID: 1, Kode: "ATR-01", Nama: "Seragam", PoinDefault: 3}}, nil
 }
 func (routeDisciplineRepository) GetViolationTypeByID(context.Context, int64, int64) (discipline.ViolationType, error) {
 	return discipline.ViolationType{ID: 1, SchoolID: 1, Kode: "ATR-01", Nama: "Seragam", PoinDefault: 3}, nil
+}
+func (routeDisciplineRepository) CreateViolationType(_ context.Context, schoolID int64, in discipline.UpsertViolationTypeInput, isActive bool) (discipline.ViolationType, error) {
+	return discipline.ViolationType{ID: 1, SchoolID: schoolID, Kode: in.Kode, Nama: in.Nama, Kategori: in.Kategori, PoinDefault: in.PoinDefault, IsActive: isActive}, nil
+}
+func (routeDisciplineRepository) UpdateViolationType(_ context.Context, schoolID, id int64, in discipline.UpsertViolationTypeInput, isActive bool) (discipline.ViolationType, error) {
+	return discipline.ViolationType{ID: id, SchoolID: schoolID, Kode: in.Kode, Nama: in.Nama, Kategori: in.Kategori, PoinDefault: in.PoinDefault, IsActive: isActive}, nil
+}
+func (routeDisciplineRepository) DeleteViolationType(context.Context, int64, int64) error {
+	return nil
 }
 func (routeDisciplineRepository) RecordViolation(_ context.Context, schoolID int64, in discipline.RecordViolationInput, poin int32, _ time.Time) (discipline.StudentViolation, error) {
 	return discipline.StudentViolation{ID: 1, SchoolID: schoolID, StudentID: in.StudentID, Poin: poin}, nil
@@ -464,11 +476,23 @@ func (routeDisciplineRepository) RecordViolation(_ context.Context, schoolID int
 func (routeDisciplineRepository) ListViolations(context.Context, int64, discipline.ListViolationsFilter) ([]discipline.StudentViolation, error) {
 	return []discipline.StudentViolation{}, nil
 }
+func (routeDisciplineRepository) UpdateViolation(_ context.Context, schoolID, id int64, in discipline.UpdateViolationInput, poin int32, _ time.Time) (discipline.StudentViolation, error) {
+	return discipline.StudentViolation{ID: id, SchoolID: schoolID, ViolationTypeID: in.ViolationTypeID, Poin: poin}, nil
+}
 func (routeDisciplineRepository) GetStudentSummary(_ context.Context, _ int64, studentID int64) (discipline.StudentSummary, error) {
 	return discipline.StudentSummary{StudentID: studentID}, nil
 }
+func (routeDisciplineRepository) ListSchoolStudents(context.Context, int64, *int64) ([]discipline.SchoolStudent, error) {
+	return []discipline.SchoolStudent{}, nil
+}
+func (routeDisciplineRepository) ListWatchlist(context.Context, int64, int64) ([]discipline.WatchlistStudent, error) {
+	return []discipline.WatchlistStudent{}, nil
+}
 func (routeDisciplineRepository) UpdateFollowup(_ context.Context, schoolID, id int64, followup string) (discipline.StudentViolation, error) {
 	return discipline.StudentViolation{ID: id, SchoolID: schoolID, TindakLanjut: &followup}, nil
+}
+func (routeDisciplineRepository) DeleteViolation(context.Context, int64, int64) error {
+	return nil
 }
 func (routeDisciplineRepository) CreateInspectionWithViolations(_ context.Context, schoolID, inspectorID int64, in discipline.CreateInspectionInput, _ time.Time, _ map[int64]int32) (discipline.DisciplineInspection, error) {
 	return discipline.DisciplineInspection{ID: 1, SchoolID: schoolID, ClassID: in.ClassID, InspectorID: inspectorID}, nil
@@ -476,12 +500,46 @@ func (routeDisciplineRepository) CreateInspectionWithViolations(_ context.Contex
 func (routeDisciplineRepository) ListInspections(context.Context, int64, discipline.ListInspectionsFilter) ([]discipline.DisciplineInspection, error) {
 	return []discipline.DisciplineInspection{}, nil
 }
+func (routeDisciplineRepository) UpdateInspection(_ context.Context, schoolID, id int64, in discipline.UpdateInspectionInput, _ time.Time, _ map[int64]int32) (discipline.DisciplineInspection, error) {
+	return discipline.DisciplineInspection{ID: id, SchoolID: schoolID, JumlahDiperiksa: in.JumlahDiperiksa, Catatan: in.Catatan}, nil
+}
+func (routeDisciplineRepository) DeleteInspection(context.Context, int64, int64) error {
+	return nil
+}
 func (routeDisciplineRepository) ListClassStudents(context.Context, int64, int64) ([]discipline.ClassStudent, error) {
 	return []discipline.ClassStudent{}, nil
+}
+func (routeDisciplineRepository) ListCounselingRecords(context.Context, int64, discipline.ListCounselingFilter) ([]discipline.CounselingRecord, error) {
+	return []discipline.CounselingRecord{}, nil
+}
+func (routeDisciplineRepository) CreateCounselingRecord(_ context.Context, schoolID int64, counselorID *int64, in discipline.CreateCounselingInput, _ time.Time) (discipline.CounselingRecord, error) {
+	return discipline.CounselingRecord{ID: 1, SchoolID: schoolID, StudentID: in.StudentID, CounselorID: counselorID, Topik: in.Topik, Status: in.Status}, nil
+}
+func (routeDisciplineRepository) UpdateCounselingRecord(_ context.Context, schoolID, id int64, in discipline.UpdateCounselingInput, _ time.Time) (discipline.CounselingRecord, error) {
+	return discipline.CounselingRecord{ID: id, SchoolID: schoolID, Topik: in.Topik, Status: in.Status}, nil
+}
+func (routeDisciplineRepository) DeleteCounselingRecord(context.Context, int64, int64) error {
+	return nil
+}
+func (routeDisciplineRepository) ListParentSummons(context.Context, int64, discipline.ListSummonsFilter) ([]discipline.ParentSummons, error) {
+	return []discipline.ParentSummons{}, nil
+}
+func (routeDisciplineRepository) CreateParentSummons(_ context.Context, schoolID int64, createdBy *int64, in discipline.CreateParentSummonsInput, _ time.Time, jadwal time.Time) (discipline.ParentSummons, error) {
+	return discipline.ParentSummons{ID: 1, SchoolID: schoolID, StudentID: in.StudentID, CreatedBy: createdBy, NomorSurat: in.NomorSurat, JadwalPertemuan: jadwal, Ruangan: in.Ruangan, Alasan: in.Alasan, Status: in.Status}, nil
+}
+func (routeDisciplineRepository) UpdateParentSummons(_ context.Context, schoolID, id int64, in discipline.UpdateParentSummonsInput, _ time.Time, jadwal time.Time) (discipline.ParentSummons, error) {
+	return discipline.ParentSummons{ID: id, SchoolID: schoolID, NomorSurat: in.NomorSurat, JadwalPertemuan: jadwal, Ruangan: in.Ruangan, Alasan: in.Alasan}, nil
+}
+func (routeDisciplineRepository) UpdateParentSummonsStatus(_ context.Context, schoolID, id int64, status string, catatan *string) (discipline.ParentSummons, error) {
+	return discipline.ParentSummons{ID: id, SchoolID: schoolID, Status: status, CatatanHasil: catatan}, nil
+}
+func (routeDisciplineRepository) DeleteParentSummons(context.Context, int64, int64) error {
+	return nil
 }
 
 func TestDisciplineRoutesRequireKesiswaan(t *testing.T) {
 	deps := testAuthDeps(t)
+	deps.Config.HTTP.RateLimitRequests = 500
 	deps.Discipline = discipline.NewService(routeDisciplineRepository{})
 	secret := strings.Repeat("d", 32)
 	tokens := auth.NewTokenService(config.AuthConfig{JWTSecret: secret, JWTIssuer: "test-issuer", JWTAudience: "test-audience", AccessTokenTTL: time.Hour})
@@ -510,8 +568,14 @@ func TestDisciplineRoutesRequireKesiswaan(t *testing.T) {
 
 	router := New(deps)
 	recordBody := `{"student_id":1,"violation_type_id":1,"tanggal":"2026-11-22"}`
+	updateRecordBody := `{"violation_type_id":1,"tanggal":"2026-11-22","poin":5}`
+	typeBody := `{"kode":"ATR-99","nama":"Topi Hilang","kategori":"atribut","poin_default":3}`
 	inspectionBody := `{"class_id":1,"tanggal":"2026-11-22","jumlah_diperiksa":25,"violations":[]}`
+	updateInspectionBody := `{"tanggal":"2026-11-22","jumlah_diperiksa":26}`
 	followupBody := `{"tindak_lanjut":"Pembinaan"}`
+	counselingBody := `{"student_id":1,"tanggal":"2026-11-22","topik":"Pembinaan","status":"scheduled"}`
+	summonsBody := `{"student_id":1,"nomor_surat":"003/SD-BA/KESISWAAN/XI/2026","tanggal_surat":"2026-11-22","jadwal_pertemuan":"2026-11-25T09:00","ruangan":"Ruang BK","alasan":"Konseling"}`
+	summonsStatusBody := `{"status":"sent"}`
 
 	denied := []struct {
 		name  string
@@ -530,13 +594,31 @@ func TestDisciplineRoutesRequireKesiswaan(t *testing.T) {
 			body   string
 		}{
 			{http.MethodGet, "/v1/discipline/types", ""},
+			{http.MethodPost, "/v1/discipline/types", typeBody},
+			{http.MethodPut, "/v1/discipline/types/1", typeBody},
+			{http.MethodDelete, "/v1/discipline/types/1", ""},
 			{http.MethodGet, "/v1/discipline/records", ""},
 			{http.MethodPost, "/v1/discipline/records", recordBody},
+			{http.MethodPut, "/v1/discipline/records/1", updateRecordBody},
 			{http.MethodPatch, "/v1/discipline/records/1/followup", followupBody},
+			{http.MethodDelete, "/v1/discipline/records/1", ""},
 			{http.MethodGet, "/v1/discipline/inspections", ""},
 			{http.MethodPost, "/v1/discipline/inspections", inspectionBody},
+			{http.MethodPut, "/v1/discipline/inspections/1", updateInspectionBody},
+			{http.MethodDelete, "/v1/discipline/inspections/1", ""},
+			{http.MethodGet, "/v1/discipline/students", ""},
 			{http.MethodGet, "/v1/discipline/students/1/summary", ""},
+			{http.MethodGet, "/v1/discipline/watchlist", ""},
 			{http.MethodGet, "/v1/discipline/classes/1/students", ""},
+			{http.MethodGet, "/v1/discipline/counseling", ""},
+			{http.MethodPost, "/v1/discipline/counseling", counselingBody},
+			{http.MethodPut, "/v1/discipline/counseling/1", counselingBody},
+			{http.MethodDelete, "/v1/discipline/counseling/1", ""},
+			{http.MethodGet, "/v1/discipline/summons", ""},
+			{http.MethodPost, "/v1/discipline/summons", summonsBody},
+			{http.MethodPut, "/v1/discipline/summons/1", summonsBody},
+			{http.MethodPatch, "/v1/discipline/summons/1/status", summonsStatusBody},
+			{http.MethodDelete, "/v1/discipline/summons/1", ""},
 		}
 		for _, ep := range endpoints {
 			rec := httptest.NewRecorder()
@@ -554,13 +636,31 @@ func TestDisciplineRoutesRequireKesiswaan(t *testing.T) {
 		want   int
 	}{
 		{http.MethodGet, "/v1/discipline/types", "", http.StatusOK},
+		{http.MethodPost, "/v1/discipline/types", typeBody, http.StatusCreated},
+		{http.MethodPut, "/v1/discipline/types/1", typeBody, http.StatusOK},
+		{http.MethodDelete, "/v1/discipline/types/1", "", http.StatusOK},
 		{http.MethodGet, "/v1/discipline/records", "", http.StatusOK},
 		{http.MethodPost, "/v1/discipline/records", recordBody, http.StatusCreated},
+		{http.MethodPut, "/v1/discipline/records/1", updateRecordBody, http.StatusOK},
 		{http.MethodPatch, "/v1/discipline/records/1/followup", followupBody, http.StatusOK},
+		{http.MethodDelete, "/v1/discipline/records/1", "", http.StatusOK},
 		{http.MethodGet, "/v1/discipline/inspections", "", http.StatusOK},
 		{http.MethodPost, "/v1/discipline/inspections", inspectionBody, http.StatusCreated},
+		{http.MethodPut, "/v1/discipline/inspections/1", updateInspectionBody, http.StatusOK},
+		{http.MethodDelete, "/v1/discipline/inspections/1", "", http.StatusOK},
+		{http.MethodGet, "/v1/discipline/students", "", http.StatusOK},
 		{http.MethodGet, "/v1/discipline/students/1/summary", "", http.StatusOK},
+		{http.MethodGet, "/v1/discipline/watchlist", "", http.StatusOK},
 		{http.MethodGet, "/v1/discipline/classes/1/students", "", http.StatusOK},
+		{http.MethodGet, "/v1/discipline/counseling", "", http.StatusOK},
+		{http.MethodPost, "/v1/discipline/counseling", counselingBody, http.StatusCreated},
+		{http.MethodPut, "/v1/discipline/counseling/1", counselingBody, http.StatusOK},
+		{http.MethodDelete, "/v1/discipline/counseling/1", "", http.StatusOK},
+		{http.MethodGet, "/v1/discipline/summons", "", http.StatusOK},
+		{http.MethodPost, "/v1/discipline/summons", summonsBody, http.StatusCreated},
+		{http.MethodPut, "/v1/discipline/summons/1", summonsBody, http.StatusOK},
+		{http.MethodPatch, "/v1/discipline/summons/1/status", summonsStatusBody, http.StatusOK},
+		{http.MethodDelete, "/v1/discipline/summons/1", "", http.StatusOK},
 	}
 	for _, ep := range allowed {
 		rec := httptest.NewRecorder()

@@ -12,6 +12,57 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countStudentViolationsByType = `-- name: CountStudentViolationsByType :one
+SELECT COUNT(*)::bigint
+FROM student_violations
+WHERE violation_type_id = $1 AND school_id = $2
+`
+
+type CountStudentViolationsByTypeParams struct {
+	ViolationTypeID int64 `json:"violation_type_id"`
+	SchoolID        int64 `json:"school_id"`
+}
+
+func (q *Queries) CountStudentViolationsByType(ctx context.Context, arg CountStudentViolationsByTypeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countStudentViolationsByType, arg.ViolationTypeID, arg.SchoolID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const createCounselingRecord = `-- name: CreateCounselingRecord :one
+INSERT INTO counseling_records (school_id, student_id, counselor_id, tanggal, topik, catatan, tindak_lanjut, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id
+`
+
+type CreateCounselingRecordParams struct {
+	SchoolID     int64     `json:"school_id"`
+	StudentID    int64     `json:"student_id"`
+	CounselorID  *int64    `json:"counselor_id"`
+	Tanggal      time.Time `json:"tanggal"`
+	Topik        string    `json:"topik"`
+	Catatan      *string   `json:"catatan"`
+	TindakLanjut *string   `json:"tindak_lanjut"`
+	Status       string    `json:"status"`
+}
+
+func (q *Queries) CreateCounselingRecord(ctx context.Context, arg CreateCounselingRecordParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createCounselingRecord,
+		arg.SchoolID,
+		arg.StudentID,
+		arg.CounselorID,
+		arg.Tanggal,
+		arg.Topik,
+		arg.Catatan,
+		arg.TindakLanjut,
+		arg.Status,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createDisciplineInspection = `-- name: CreateDisciplineInspection :one
 WITH inserted AS (
     INSERT INTO discipline_inspections (school_id, class_id, inspector_id, tanggal, jumlah_diperiksa, catatan)
@@ -67,9 +118,48 @@ func (q *Queries) CreateDisciplineInspection(ctx context.Context, arg CreateDisc
 	return i, err
 }
 
+const createParentSummons = `-- name: CreateParentSummons :one
+INSERT INTO parent_summons (school_id, student_id, created_by, nomor_surat, tanggal_surat, jadwal_pertemuan, ruangan, alasan, nama_ortu, no_hp_ortu, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id
+`
+
+type CreateParentSummonsParams struct {
+	SchoolID        int64     `json:"school_id"`
+	StudentID       int64     `json:"student_id"`
+	CreatedBy       *int64    `json:"created_by"`
+	NomorSurat      string    `json:"nomor_surat"`
+	TanggalSurat    time.Time `json:"tanggal_surat"`
+	JadwalPertemuan time.Time `json:"jadwal_pertemuan"`
+	Ruangan         string    `json:"ruangan"`
+	Alasan          string    `json:"alasan"`
+	NamaOrtu        *string   `json:"nama_ortu"`
+	NoHpOrtu        *string   `json:"no_hp_ortu"`
+	Status          string    `json:"status"`
+}
+
+func (q *Queries) CreateParentSummons(ctx context.Context, arg CreateParentSummonsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createParentSummons,
+		arg.SchoolID,
+		arg.StudentID,
+		arg.CreatedBy,
+		arg.NomorSurat,
+		arg.TanggalSurat,
+		arg.JadwalPertemuan,
+		arg.Ruangan,
+		arg.Alasan,
+		arg.NamaOrtu,
+		arg.NoHpOrtu,
+		arg.Status,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createViolationType = `-- name: CreateViolationType :one
-INSERT INTO violation_types (school_id, kode, nama, kategori, poin_default)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO violation_types (school_id, kode, nama, kategori, poin_default, is_active)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, school_id, kode, nama, kategori, poin_default, is_active, created_at
 `
 
@@ -79,6 +169,7 @@ type CreateViolationTypeParams struct {
 	Nama        string `json:"nama"`
 	Kategori    string `json:"kategori"`
 	PoinDefault int32  `json:"poin_default"`
+	IsActive    bool   `json:"is_active"`
 }
 
 func (q *Queries) CreateViolationType(ctx context.Context, arg CreateViolationTypeParams) (ViolationType, error) {
@@ -88,6 +179,7 @@ func (q *Queries) CreateViolationType(ctx context.Context, arg CreateViolationTy
 		arg.Nama,
 		arg.Kategori,
 		arg.PoinDefault,
+		arg.IsActive,
 	)
 	var i ViolationType
 	err := row.Scan(
@@ -99,6 +191,166 @@ func (q *Queries) CreateViolationType(ctx context.Context, arg CreateViolationTy
 		&i.PoinDefault,
 		&i.IsActive,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteCounselingRecord = `-- name: DeleteCounselingRecord :execrows
+DELETE FROM counseling_records
+WHERE id = $1 AND school_id = $2
+`
+
+type DeleteCounselingRecordParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+func (q *Queries) DeleteCounselingRecord(ctx context.Context, arg DeleteCounselingRecordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCounselingRecord, arg.ID, arg.SchoolID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteDisciplineInspection = `-- name: DeleteDisciplineInspection :execrows
+DELETE FROM discipline_inspections
+WHERE id = $1 AND school_id = $2
+`
+
+type DeleteDisciplineInspectionParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+func (q *Queries) DeleteDisciplineInspection(ctx context.Context, arg DeleteDisciplineInspectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDisciplineInspection, arg.ID, arg.SchoolID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteParentSummons = `-- name: DeleteParentSummons :execrows
+DELETE FROM parent_summons
+WHERE id = $1 AND school_id = $2
+`
+
+type DeleteParentSummonsParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+func (q *Queries) DeleteParentSummons(ctx context.Context, arg DeleteParentSummonsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteParentSummons, arg.ID, arg.SchoolID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStudentViolation = `-- name: DeleteStudentViolation :execrows
+DELETE FROM student_violations
+WHERE id = $1 AND school_id = $2
+`
+
+type DeleteStudentViolationParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+func (q *Queries) DeleteStudentViolation(ctx context.Context, arg DeleteStudentViolationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStudentViolation, arg.ID, arg.SchoolID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStudentViolationsByInspection = `-- name: DeleteStudentViolationsByInspection :exec
+DELETE FROM student_violations
+WHERE inspection_id = $1 AND school_id = $2
+`
+
+type DeleteStudentViolationsByInspectionParams struct {
+	InspectionID *int64 `json:"inspection_id"`
+	SchoolID     int64  `json:"school_id"`
+}
+
+func (q *Queries) DeleteStudentViolationsByInspection(ctx context.Context, arg DeleteStudentViolationsByInspectionParams) error {
+	_, err := q.db.Exec(ctx, deleteStudentViolationsByInspection, arg.InspectionID, arg.SchoolID)
+	return err
+}
+
+const deleteViolationType = `-- name: DeleteViolationType :execrows
+DELETE FROM violation_types
+WHERE id = $1 AND school_id = $2
+`
+
+type DeleteViolationTypeParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+func (q *Queries) DeleteViolationType(ctx context.Context, arg DeleteViolationTypeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteViolationType, arg.ID, arg.SchoolID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getCounselingRecord = `-- name: GetCounselingRecord :one
+SELECT cr.id, cr.school_id, cr.student_id, cr.counselor_id, cr.tanggal, cr.topik, cr.catatan, cr.tindak_lanjut, cr.status, cr.created_at,
+       s.nis, s.nama AS student_name, c.nama_kelas, st.nama AS counselor_name
+FROM counseling_records cr
+JOIN students s ON s.id = cr.student_id
+LEFT JOIN class_enrollments ce ON ce.student_id = s.id AND ce.status = 'aktif'
+LEFT JOIN classes c ON c.id = ce.class_id
+LEFT JOIN staff st ON st.id = cr.counselor_id
+WHERE cr.id = $1 AND cr.school_id = $2
+`
+
+type GetCounselingRecordParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+type GetCounselingRecordRow struct {
+	ID            int64     `json:"id"`
+	SchoolID      int64     `json:"school_id"`
+	StudentID     int64     `json:"student_id"`
+	CounselorID   *int64    `json:"counselor_id"`
+	Tanggal       time.Time `json:"tanggal"`
+	Topik         string    `json:"topik"`
+	Catatan       *string   `json:"catatan"`
+	TindakLanjut  *string   `json:"tindak_lanjut"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	Nis           *string   `json:"nis"`
+	StudentName   string    `json:"student_name"`
+	NamaKelas     *string   `json:"nama_kelas"`
+	CounselorName *string   `json:"counselor_name"`
+}
+
+func (q *Queries) GetCounselingRecord(ctx context.Context, arg GetCounselingRecordParams) (GetCounselingRecordRow, error) {
+	row := q.db.QueryRow(ctx, getCounselingRecord, arg.ID, arg.SchoolID)
+	var i GetCounselingRecordRow
+	err := row.Scan(
+		&i.ID,
+		&i.SchoolID,
+		&i.StudentID,
+		&i.CounselorID,
+		&i.Tanggal,
+		&i.Topik,
+		&i.Catatan,
+		&i.TindakLanjut,
+		&i.Status,
+		&i.CreatedAt,
+		&i.Nis,
+		&i.StudentName,
+		&i.NamaKelas,
+		&i.CounselorName,
 	)
 	return i, err
 }
@@ -148,6 +400,77 @@ func (q *Queries) GetDisciplineInspection(ctx context.Context, arg GetDiscipline
 	return i, err
 }
 
+const getParentSummons = `-- name: GetParentSummons :one
+SELECT ps.id, ps.school_id, ps.student_id, ps.created_by, ps.nomor_surat, ps.tanggal_surat, ps.jadwal_pertemuan,
+       ps.ruangan, ps.alasan, ps.nama_ortu, ps.no_hp_ortu, ps.status, ps.sent_at, ps.completed_at, ps.catatan_hasil, ps.created_at,
+       s.nis, s.nama AS student_name, c.nama_kelas, st.nama AS created_by_name,
+       COALESCE((SELECT SUM(sv.poin) FROM student_violations sv WHERE sv.student_id = ps.student_id AND sv.school_id = ps.school_id), 0)::bigint AS total_points
+FROM parent_summons ps
+JOIN students s ON s.id = ps.student_id
+LEFT JOIN class_enrollments ce ON ce.student_id = s.id AND ce.status = 'aktif'
+LEFT JOIN classes c ON c.id = ce.class_id
+LEFT JOIN staff st ON st.id = ps.created_by
+WHERE ps.id = $1 AND ps.school_id = $2
+`
+
+type GetParentSummonsParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+type GetParentSummonsRow struct {
+	ID              int64              `json:"id"`
+	SchoolID        int64              `json:"school_id"`
+	StudentID       int64              `json:"student_id"`
+	CreatedBy       *int64             `json:"created_by"`
+	NomorSurat      string             `json:"nomor_surat"`
+	TanggalSurat    time.Time          `json:"tanggal_surat"`
+	JadwalPertemuan time.Time          `json:"jadwal_pertemuan"`
+	Ruangan         string             `json:"ruangan"`
+	Alasan          string             `json:"alasan"`
+	NamaOrtu        *string            `json:"nama_ortu"`
+	NoHpOrtu        *string            `json:"no_hp_ortu"`
+	Status          string             `json:"status"`
+	SentAt          pgtype.Timestamptz `json:"sent_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CatatanHasil    *string            `json:"catatan_hasil"`
+	CreatedAt       time.Time          `json:"created_at"`
+	Nis             *string            `json:"nis"`
+	StudentName     string             `json:"student_name"`
+	NamaKelas       *string            `json:"nama_kelas"`
+	CreatedByName   *string            `json:"created_by_name"`
+	TotalPoints     int64              `json:"total_points"`
+}
+
+func (q *Queries) GetParentSummons(ctx context.Context, arg GetParentSummonsParams) (GetParentSummonsRow, error) {
+	row := q.db.QueryRow(ctx, getParentSummons, arg.ID, arg.SchoolID)
+	var i GetParentSummonsRow
+	err := row.Scan(
+		&i.ID,
+		&i.SchoolID,
+		&i.StudentID,
+		&i.CreatedBy,
+		&i.NomorSurat,
+		&i.TanggalSurat,
+		&i.JadwalPertemuan,
+		&i.Ruangan,
+		&i.Alasan,
+		&i.NamaOrtu,
+		&i.NoHpOrtu,
+		&i.Status,
+		&i.SentAt,
+		&i.CompletedAt,
+		&i.CatatanHasil,
+		&i.CreatedAt,
+		&i.Nis,
+		&i.StudentName,
+		&i.NamaKelas,
+		&i.CreatedByName,
+		&i.TotalPoints,
+	)
+	return i, err
+}
+
 const getStudentPointsSummary = `-- name: GetStudentPointsSummary :one
 SELECT COALESCE(SUM(sv.poin), 0)::bigint AS total_points,
        COUNT(sv.id)::bigint AS total_incidents
@@ -170,6 +493,66 @@ func (q *Queries) GetStudentPointsSummary(ctx context.Context, arg GetStudentPoi
 	row := q.db.QueryRow(ctx, getStudentPointsSummary, arg.StudentID, arg.SchoolID)
 	var i GetStudentPointsSummaryRow
 	err := row.Scan(&i.TotalPoints, &i.TotalIncidents)
+	return i, err
+}
+
+const getStudentViolationByID = `-- name: GetStudentViolationByID :one
+SELECT sv.id, sv.school_id, sv.inspection_id, sv.student_id, sv.violation_type_id, sv.poin, sv.keterangan, sv.tindak_lanjut, sv.tanggal, sv.created_at,
+       s.nis, s.nama AS student_name, c.nama_kelas,
+       vt.kode AS violation_code, vt.nama AS violation_name, vt.kategori AS violation_category
+FROM student_violations sv
+JOIN students s ON s.id = sv.student_id
+LEFT JOIN class_enrollments ce ON ce.student_id = s.id AND ce.status = 'aktif'
+LEFT JOIN classes c ON c.id = ce.class_id
+JOIN violation_types vt ON vt.id = sv.violation_type_id
+WHERE sv.id = $1 AND sv.school_id = $2
+`
+
+type GetStudentViolationByIDParams struct {
+	ID       int64 `json:"id"`
+	SchoolID int64 `json:"school_id"`
+}
+
+type GetStudentViolationByIDRow struct {
+	ID                int64     `json:"id"`
+	SchoolID          int64     `json:"school_id"`
+	InspectionID      *int64    `json:"inspection_id"`
+	StudentID         int64     `json:"student_id"`
+	ViolationTypeID   int64     `json:"violation_type_id"`
+	Poin              int32     `json:"poin"`
+	Keterangan        *string   `json:"keterangan"`
+	TindakLanjut      *string   `json:"tindak_lanjut"`
+	Tanggal           time.Time `json:"tanggal"`
+	CreatedAt         time.Time `json:"created_at"`
+	Nis               *string   `json:"nis"`
+	StudentName       string    `json:"student_name"`
+	NamaKelas         *string   `json:"nama_kelas"`
+	ViolationCode     string    `json:"violation_code"`
+	ViolationName     string    `json:"violation_name"`
+	ViolationCategory string    `json:"violation_category"`
+}
+
+func (q *Queries) GetStudentViolationByID(ctx context.Context, arg GetStudentViolationByIDParams) (GetStudentViolationByIDRow, error) {
+	row := q.db.QueryRow(ctx, getStudentViolationByID, arg.ID, arg.SchoolID)
+	var i GetStudentViolationByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.SchoolID,
+		&i.InspectionID,
+		&i.StudentID,
+		&i.ViolationTypeID,
+		&i.Poin,
+		&i.Keterangan,
+		&i.TindakLanjut,
+		&i.Tanggal,
+		&i.CreatedAt,
+		&i.Nis,
+		&i.StudentName,
+		&i.NamaKelas,
+		&i.ViolationCode,
+		&i.ViolationName,
+		&i.ViolationCategory,
+	)
 	return i, err
 }
 
@@ -252,6 +635,78 @@ func (q *Queries) ListClassStudentsForInspection(ctx context.Context, arg ListCl
 	return items, nil
 }
 
+const listCounselingRecords = `-- name: ListCounselingRecords :many
+SELECT cr.id, cr.school_id, cr.student_id, cr.counselor_id, cr.tanggal, cr.topik, cr.catatan, cr.tindak_lanjut, cr.status, cr.created_at,
+       s.nis, s.nama AS student_name, c.nama_kelas, st.nama AS counselor_name
+FROM counseling_records cr
+JOIN students s ON s.id = cr.student_id
+LEFT JOIN class_enrollments ce ON ce.student_id = s.id AND ce.status = 'aktif'
+LEFT JOIN classes c ON c.id = ce.class_id
+LEFT JOIN staff st ON st.id = cr.counselor_id
+WHERE cr.school_id = $1
+  AND ($2::bigint IS NULL OR cr.student_id = $2)
+  AND ($3::varchar IS NULL OR cr.status = $3)
+ORDER BY cr.tanggal DESC, cr.created_at DESC
+`
+
+type ListCounselingRecordsParams struct {
+	SchoolID  int64   `json:"school_id"`
+	StudentID *int64  `json:"student_id"`
+	Status    *string `json:"status"`
+}
+
+type ListCounselingRecordsRow struct {
+	ID            int64     `json:"id"`
+	SchoolID      int64     `json:"school_id"`
+	StudentID     int64     `json:"student_id"`
+	CounselorID   *int64    `json:"counselor_id"`
+	Tanggal       time.Time `json:"tanggal"`
+	Topik         string    `json:"topik"`
+	Catatan       *string   `json:"catatan"`
+	TindakLanjut  *string   `json:"tindak_lanjut"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	Nis           *string   `json:"nis"`
+	StudentName   string    `json:"student_name"`
+	NamaKelas     *string   `json:"nama_kelas"`
+	CounselorName *string   `json:"counselor_name"`
+}
+
+func (q *Queries) ListCounselingRecords(ctx context.Context, arg ListCounselingRecordsParams) ([]ListCounselingRecordsRow, error) {
+	rows, err := q.db.Query(ctx, listCounselingRecords, arg.SchoolID, arg.StudentID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCounselingRecordsRow{}
+	for rows.Next() {
+		var i ListCounselingRecordsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SchoolID,
+			&i.StudentID,
+			&i.CounselorID,
+			&i.Tanggal,
+			&i.Topik,
+			&i.Catatan,
+			&i.TindakLanjut,
+			&i.Status,
+			&i.CreatedAt,
+			&i.Nis,
+			&i.StudentName,
+			&i.NamaKelas,
+			&i.CounselorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDisciplineInspections = `-- name: ListDisciplineInspections :many
 SELECT di.id, di.school_id, di.class_id, di.inspector_id, di.tanggal, di.jumlah_diperiksa, di.catatan, di.created_at,
        c.nama_kelas, st.nama AS inspector_name
@@ -303,6 +758,153 @@ func (q *Queries) ListDisciplineInspections(ctx context.Context, arg ListDiscipl
 			&i.CreatedAt,
 			&i.NamaKelas,
 			&i.InspectorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParentSummons = `-- name: ListParentSummons :many
+SELECT ps.id, ps.school_id, ps.student_id, ps.created_by, ps.nomor_surat, ps.tanggal_surat, ps.jadwal_pertemuan,
+       ps.ruangan, ps.alasan, ps.nama_ortu, ps.no_hp_ortu, ps.status, ps.sent_at, ps.completed_at, ps.catatan_hasil, ps.created_at,
+       s.nis, s.nama AS student_name, c.nama_kelas, st.nama AS created_by_name,
+       COALESCE((SELECT SUM(sv.poin) FROM student_violations sv WHERE sv.student_id = ps.student_id AND sv.school_id = ps.school_id), 0)::bigint AS total_points
+FROM parent_summons ps
+JOIN students s ON s.id = ps.student_id
+LEFT JOIN class_enrollments ce ON ce.student_id = s.id AND ce.status = 'aktif'
+LEFT JOIN classes c ON c.id = ce.class_id
+LEFT JOIN staff st ON st.id = ps.created_by
+WHERE ps.school_id = $1
+  AND ($2::bigint IS NULL OR ps.student_id = $2)
+  AND ($3::varchar IS NULL OR ps.status = $3)
+ORDER BY ps.tanggal_surat DESC, ps.created_at DESC
+`
+
+type ListParentSummonsParams struct {
+	SchoolID  int64   `json:"school_id"`
+	StudentID *int64  `json:"student_id"`
+	Status    *string `json:"status"`
+}
+
+type ListParentSummonsRow struct {
+	ID              int64              `json:"id"`
+	SchoolID        int64              `json:"school_id"`
+	StudentID       int64              `json:"student_id"`
+	CreatedBy       *int64             `json:"created_by"`
+	NomorSurat      string             `json:"nomor_surat"`
+	TanggalSurat    time.Time          `json:"tanggal_surat"`
+	JadwalPertemuan time.Time          `json:"jadwal_pertemuan"`
+	Ruangan         string             `json:"ruangan"`
+	Alasan          string             `json:"alasan"`
+	NamaOrtu        *string            `json:"nama_ortu"`
+	NoHpOrtu        *string            `json:"no_hp_ortu"`
+	Status          string             `json:"status"`
+	SentAt          pgtype.Timestamptz `json:"sent_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CatatanHasil    *string            `json:"catatan_hasil"`
+	CreatedAt       time.Time          `json:"created_at"`
+	Nis             *string            `json:"nis"`
+	StudentName     string             `json:"student_name"`
+	NamaKelas       *string            `json:"nama_kelas"`
+	CreatedByName   *string            `json:"created_by_name"`
+	TotalPoints     int64              `json:"total_points"`
+}
+
+func (q *Queries) ListParentSummons(ctx context.Context, arg ListParentSummonsParams) ([]ListParentSummonsRow, error) {
+	rows, err := q.db.Query(ctx, listParentSummons, arg.SchoolID, arg.StudentID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListParentSummonsRow{}
+	for rows.Next() {
+		var i ListParentSummonsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SchoolID,
+			&i.StudentID,
+			&i.CreatedBy,
+			&i.NomorSurat,
+			&i.TanggalSurat,
+			&i.JadwalPertemuan,
+			&i.Ruangan,
+			&i.Alasan,
+			&i.NamaOrtu,
+			&i.NoHpOrtu,
+			&i.Status,
+			&i.SentAt,
+			&i.CompletedAt,
+			&i.CatatanHasil,
+			&i.CreatedAt,
+			&i.Nis,
+			&i.StudentName,
+			&i.NamaKelas,
+			&i.CreatedByName,
+			&i.TotalPoints,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSchoolStudents = `-- name: ListSchoolStudents :many
+SELECT s.id, s.nis, s.nama, s.jenis_kelamin, s.no_hp_ortu, c.id AS class_id, c.nama_kelas, c.tingkat
+FROM class_enrollments ce
+JOIN students s ON s.id = ce.student_id
+JOIN classes c ON c.id = ce.class_id
+JOIN academic_years ay ON ay.id = c.academic_year_id
+WHERE ay.school_id = $1
+  AND ay.is_active
+  AND ce.status = 'aktif'
+  AND s.is_active
+  AND ($2::bigint IS NULL OR c.id = $2)
+ORDER BY c.tingkat, c.nama_kelas, s.nama
+`
+
+type ListSchoolStudentsParams struct {
+	SchoolID int64  `json:"school_id"`
+	ClassID  *int64 `json:"class_id"`
+}
+
+type ListSchoolStudentsRow struct {
+	ID           int64   `json:"id"`
+	Nis          *string `json:"nis"`
+	Nama         string  `json:"nama"`
+	JenisKelamin string  `json:"jenis_kelamin"`
+	NoHpOrtu     *string `json:"no_hp_ortu"`
+	ClassID      int64   `json:"class_id"`
+	NamaKelas    string  `json:"nama_kelas"`
+	Tingkat      int16   `json:"tingkat"`
+}
+
+func (q *Queries) ListSchoolStudents(ctx context.Context, arg ListSchoolStudentsParams) ([]ListSchoolStudentsRow, error) {
+	rows, err := q.db.Query(ctx, listSchoolStudents, arg.SchoolID, arg.ClassID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSchoolStudentsRow{}
+	for rows.Next() {
+		var i ListSchoolStudentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nis,
+			&i.Nama,
+			&i.JenisKelamin,
+			&i.NoHpOrtu,
+			&i.ClassID,
+			&i.NamaKelas,
+			&i.Tingkat,
 		); err != nil {
 			return nil, err
 		}
@@ -398,18 +1000,87 @@ func (q *Queries) ListStudentViolations(ctx context.Context, arg ListStudentViol
 	return items, nil
 }
 
+const listStudentsWatchlist = `-- name: ListStudentsWatchlist :many
+SELECT s.id AS student_id, s.nis, s.nama AS student_name, s.no_hp_ortu,
+       c.id AS class_id, c.nama_kelas,
+       COALESCE(SUM(sv.poin), 0)::bigint AS total_points,
+       COUNT(sv.id)::bigint AS total_incidents,
+       MAX(sv.tanggal)::date AS last_violation_date
+FROM student_violations sv
+JOIN students s ON s.id = sv.student_id
+LEFT JOIN class_enrollments ce ON ce.student_id = s.id AND ce.status = 'aktif'
+LEFT JOIN classes c ON c.id = ce.class_id
+WHERE sv.school_id = $1
+GROUP BY s.id, s.nis, s.nama, s.no_hp_ortu, c.id, c.nama_kelas
+HAVING COALESCE(SUM(sv.poin), 0) >= $2::bigint
+ORDER BY total_points DESC, total_incidents DESC, s.nama
+`
+
+type ListStudentsWatchlistParams struct {
+	SchoolID  int64 `json:"school_id"`
+	MinPoints int64 `json:"min_points"`
+}
+
+type ListStudentsWatchlistRow struct {
+	StudentID         int64     `json:"student_id"`
+	Nis               *string   `json:"nis"`
+	StudentName       string    `json:"student_name"`
+	NoHpOrtu          *string   `json:"no_hp_ortu"`
+	ClassID           *int64    `json:"class_id"`
+	NamaKelas         *string   `json:"nama_kelas"`
+	TotalPoints       int64     `json:"total_points"`
+	TotalIncidents    int64     `json:"total_incidents"`
+	LastViolationDate time.Time `json:"last_violation_date"`
+}
+
+func (q *Queries) ListStudentsWatchlist(ctx context.Context, arg ListStudentsWatchlistParams) ([]ListStudentsWatchlistRow, error) {
+	rows, err := q.db.Query(ctx, listStudentsWatchlist, arg.SchoolID, arg.MinPoints)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStudentsWatchlistRow{}
+	for rows.Next() {
+		var i ListStudentsWatchlistRow
+		if err := rows.Scan(
+			&i.StudentID,
+			&i.Nis,
+			&i.StudentName,
+			&i.NoHpOrtu,
+			&i.ClassID,
+			&i.NamaKelas,
+			&i.TotalPoints,
+			&i.TotalIncidents,
+			&i.LastViolationDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listViolationTypes = `-- name: ListViolationTypes :many
 
 SELECT id, school_id, kode, nama, kategori, poin_default, is_active, created_at
 FROM violation_types
-WHERE school_id = $1 AND is_active
+WHERE school_id = $1
+  AND ($2::boolean OR is_active)
 ORDER BY kategori, kode
 `
 
+type ListViolationTypesParams struct {
+	SchoolID        int64 `json:"school_id"`
+	IncludeInactive bool  `json:"include_inactive"`
+}
+
 // db/query/discipline.sql
 // Modul Kedisiplinan Siswa (Kelompok D-03)
-func (q *Queries) ListViolationTypes(ctx context.Context, schoolID int64) ([]ViolationType, error) {
-	rows, err := q.db.Query(ctx, listViolationTypes, schoolID)
+func (q *Queries) ListViolationTypes(ctx context.Context, arg ListViolationTypesParams) ([]ViolationType, error) {
+	rows, err := q.db.Query(ctx, listViolationTypes, arg.SchoolID, arg.IncludeInactive)
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +1097,81 @@ func (q *Queries) ListViolationTypes(ctx context.Context, schoolID int64) ([]Vio
 			&i.PoinDefault,
 			&i.IsActive,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listViolationsByInspectionIDs = `-- name: ListViolationsByInspectionIDs :many
+SELECT sv.id, sv.school_id, sv.inspection_id, sv.student_id, sv.violation_type_id, sv.poin, sv.keterangan, sv.tindak_lanjut, sv.tanggal, sv.created_at,
+       s.nis, s.nama AS student_name, c.nama_kelas,
+       vt.kode AS violation_code, vt.nama AS violation_name, vt.kategori AS violation_category
+FROM student_violations sv
+JOIN students s ON s.id = sv.student_id
+LEFT JOIN class_enrollments ce ON ce.student_id = s.id AND ce.status = 'aktif'
+LEFT JOIN classes c ON c.id = ce.class_id
+JOIN violation_types vt ON vt.id = sv.violation_type_id
+WHERE sv.school_id = $1
+  AND sv.inspection_id = ANY($2::bigint[])
+ORDER BY s.nama, vt.kode
+`
+
+type ListViolationsByInspectionIDsParams struct {
+	SchoolID      int64   `json:"school_id"`
+	InspectionIds []int64 `json:"inspection_ids"`
+}
+
+type ListViolationsByInspectionIDsRow struct {
+	ID                int64     `json:"id"`
+	SchoolID          int64     `json:"school_id"`
+	InspectionID      *int64    `json:"inspection_id"`
+	StudentID         int64     `json:"student_id"`
+	ViolationTypeID   int64     `json:"violation_type_id"`
+	Poin              int32     `json:"poin"`
+	Keterangan        *string   `json:"keterangan"`
+	TindakLanjut      *string   `json:"tindak_lanjut"`
+	Tanggal           time.Time `json:"tanggal"`
+	CreatedAt         time.Time `json:"created_at"`
+	Nis               *string   `json:"nis"`
+	StudentName       string    `json:"student_name"`
+	NamaKelas         *string   `json:"nama_kelas"`
+	ViolationCode     string    `json:"violation_code"`
+	ViolationName     string    `json:"violation_name"`
+	ViolationCategory string    `json:"violation_category"`
+}
+
+func (q *Queries) ListViolationsByInspectionIDs(ctx context.Context, arg ListViolationsByInspectionIDsParams) ([]ListViolationsByInspectionIDsRow, error) {
+	rows, err := q.db.Query(ctx, listViolationsByInspectionIDs, arg.SchoolID, arg.InspectionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListViolationsByInspectionIDsRow{}
+	for rows.Next() {
+		var i ListViolationsByInspectionIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SchoolID,
+			&i.InspectionID,
+			&i.StudentID,
+			&i.ViolationTypeID,
+			&i.Poin,
+			&i.Keterangan,
+			&i.TindakLanjut,
+			&i.Tanggal,
+			&i.CreatedAt,
+			&i.Nis,
+			&i.StudentName,
+			&i.NamaKelas,
+			&i.ViolationCode,
+			&i.ViolationName,
+			&i.ViolationCategory,
 		); err != nil {
 			return nil, err
 		}
@@ -481,6 +1227,225 @@ func (q *Queries) RecordStudentViolation(ctx context.Context, arg RecordStudentV
 	return i, err
 }
 
+const studentInSchool = `-- name: StudentInSchool :one
+SELECT EXISTS (
+    SELECT 1
+    FROM class_enrollments ce
+    JOIN classes c ON c.id = ce.class_id
+    JOIN academic_years ay ON ay.id = c.academic_year_id
+    WHERE ce.student_id = $1
+      AND ay.school_id = $2
+)::boolean
+`
+
+type StudentInSchoolParams struct {
+	StudentID int64 `json:"student_id"`
+	SchoolID  int64 `json:"school_id"`
+}
+
+func (q *Queries) StudentInSchool(ctx context.Context, arg StudentInSchoolParams) (bool, error) {
+	row := q.db.QueryRow(ctx, studentInSchool, arg.StudentID, arg.SchoolID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const updateCounselingRecord = `-- name: UpdateCounselingRecord :one
+UPDATE counseling_records
+SET tanggal = $1,
+    topik = $2,
+    catatan = $3,
+    tindak_lanjut = $4,
+    status = $5
+WHERE id = $6 AND school_id = $7
+RETURNING id
+`
+
+type UpdateCounselingRecordParams struct {
+	Tanggal      time.Time `json:"tanggal"`
+	Topik        string    `json:"topik"`
+	Catatan      *string   `json:"catatan"`
+	TindakLanjut *string   `json:"tindak_lanjut"`
+	Status       string    `json:"status"`
+	ID           int64     `json:"id"`
+	SchoolID     int64     `json:"school_id"`
+}
+
+func (q *Queries) UpdateCounselingRecord(ctx context.Context, arg UpdateCounselingRecordParams) (int64, error) {
+	row := q.db.QueryRow(ctx, updateCounselingRecord,
+		arg.Tanggal,
+		arg.Topik,
+		arg.Catatan,
+		arg.TindakLanjut,
+		arg.Status,
+		arg.ID,
+		arg.SchoolID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateDisciplineInspection = `-- name: UpdateDisciplineInspection :one
+UPDATE discipline_inspections
+SET tanggal = $1,
+    jumlah_diperiksa = $2,
+    catatan = $3
+WHERE id = $4 AND school_id = $5
+RETURNING id, school_id, class_id, inspector_id, tanggal, jumlah_diperiksa, catatan, created_at
+`
+
+type UpdateDisciplineInspectionParams struct {
+	Tanggal         time.Time `json:"tanggal"`
+	JumlahDiperiksa int32     `json:"jumlah_diperiksa"`
+	Catatan         *string   `json:"catatan"`
+	ID              int64     `json:"id"`
+	SchoolID        int64     `json:"school_id"`
+}
+
+func (q *Queries) UpdateDisciplineInspection(ctx context.Context, arg UpdateDisciplineInspectionParams) (DisciplineInspection, error) {
+	row := q.db.QueryRow(ctx, updateDisciplineInspection,
+		arg.Tanggal,
+		arg.JumlahDiperiksa,
+		arg.Catatan,
+		arg.ID,
+		arg.SchoolID,
+	)
+	var i DisciplineInspection
+	err := row.Scan(
+		&i.ID,
+		&i.SchoolID,
+		&i.ClassID,
+		&i.InspectorID,
+		&i.Tanggal,
+		&i.JumlahDiperiksa,
+		&i.Catatan,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateParentSummons = `-- name: UpdateParentSummons :one
+UPDATE parent_summons
+SET nomor_surat = $1,
+    tanggal_surat = $2,
+    jadwal_pertemuan = $3,
+    ruangan = $4,
+    alasan = $5,
+    nama_ortu = $6,
+    no_hp_ortu = $7,
+    catatan_hasil = $8
+WHERE id = $9 AND school_id = $10
+RETURNING id
+`
+
+type UpdateParentSummonsParams struct {
+	NomorSurat      string    `json:"nomor_surat"`
+	TanggalSurat    time.Time `json:"tanggal_surat"`
+	JadwalPertemuan time.Time `json:"jadwal_pertemuan"`
+	Ruangan         string    `json:"ruangan"`
+	Alasan          string    `json:"alasan"`
+	NamaOrtu        *string   `json:"nama_ortu"`
+	NoHpOrtu        *string   `json:"no_hp_ortu"`
+	CatatanHasil    *string   `json:"catatan_hasil"`
+	ID              int64     `json:"id"`
+	SchoolID        int64     `json:"school_id"`
+}
+
+func (q *Queries) UpdateParentSummons(ctx context.Context, arg UpdateParentSummonsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, updateParentSummons,
+		arg.NomorSurat,
+		arg.TanggalSurat,
+		arg.JadwalPertemuan,
+		arg.Ruangan,
+		arg.Alasan,
+		arg.NamaOrtu,
+		arg.NoHpOrtu,
+		arg.CatatanHasil,
+		arg.ID,
+		arg.SchoolID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateParentSummonsStatus = `-- name: UpdateParentSummonsStatus :one
+UPDATE parent_summons
+SET status = $1,
+    sent_at = CASE WHEN $1::varchar = 'sent' AND sent_at IS NULL THEN now() ELSE sent_at END,
+    completed_at = CASE WHEN $1::varchar = 'completed' THEN now() ELSE completed_at END,
+    catatan_hasil = COALESCE($2, catatan_hasil)
+WHERE id = $3 AND school_id = $4
+RETURNING id
+`
+
+type UpdateParentSummonsStatusParams struct {
+	Status       string  `json:"status"`
+	CatatanHasil *string `json:"catatan_hasil"`
+	ID           int64   `json:"id"`
+	SchoolID     int64   `json:"school_id"`
+}
+
+func (q *Queries) UpdateParentSummonsStatus(ctx context.Context, arg UpdateParentSummonsStatusParams) (int64, error) {
+	row := q.db.QueryRow(ctx, updateParentSummonsStatus,
+		arg.Status,
+		arg.CatatanHasil,
+		arg.ID,
+		arg.SchoolID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateStudentViolation = `-- name: UpdateStudentViolation :one
+UPDATE student_violations
+SET violation_type_id = $1,
+    poin = $2,
+    keterangan = $3,
+    tindak_lanjut = $4,
+    tanggal = $5
+WHERE id = $6 AND school_id = $7
+RETURNING id, school_id, inspection_id, student_id, violation_type_id, poin, keterangan, tindak_lanjut, tanggal, created_at
+`
+
+type UpdateStudentViolationParams struct {
+	ViolationTypeID int64     `json:"violation_type_id"`
+	Poin            int32     `json:"poin"`
+	Keterangan      *string   `json:"keterangan"`
+	TindakLanjut    *string   `json:"tindak_lanjut"`
+	Tanggal         time.Time `json:"tanggal"`
+	ID              int64     `json:"id"`
+	SchoolID        int64     `json:"school_id"`
+}
+
+func (q *Queries) UpdateStudentViolation(ctx context.Context, arg UpdateStudentViolationParams) (StudentViolation, error) {
+	row := q.db.QueryRow(ctx, updateStudentViolation,
+		arg.ViolationTypeID,
+		arg.Poin,
+		arg.Keterangan,
+		arg.TindakLanjut,
+		arg.Tanggal,
+		arg.ID,
+		arg.SchoolID,
+	)
+	var i StudentViolation
+	err := row.Scan(
+		&i.ID,
+		&i.SchoolID,
+		&i.InspectionID,
+		&i.StudentID,
+		&i.ViolationTypeID,
+		&i.Poin,
+		&i.Keterangan,
+		&i.TindakLanjut,
+		&i.Tanggal,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateStudentViolationFollowup = `-- name: UpdateStudentViolationFollowup :one
 UPDATE student_violations
 SET tindak_lanjut = $1
@@ -507,6 +1472,51 @@ func (q *Queries) UpdateStudentViolationFollowup(ctx context.Context, arg Update
 		&i.Keterangan,
 		&i.TindakLanjut,
 		&i.Tanggal,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateViolationType = `-- name: UpdateViolationType :one
+UPDATE violation_types
+SET kode = $1,
+    nama = $2,
+    kategori = $3,
+    poin_default = $4,
+    is_active = $5
+WHERE id = $6 AND school_id = $7
+RETURNING id, school_id, kode, nama, kategori, poin_default, is_active, created_at
+`
+
+type UpdateViolationTypeParams struct {
+	Kode        string `json:"kode"`
+	Nama        string `json:"nama"`
+	Kategori    string `json:"kategori"`
+	PoinDefault int32  `json:"poin_default"`
+	IsActive    bool   `json:"is_active"`
+	ID          int64  `json:"id"`
+	SchoolID    int64  `json:"school_id"`
+}
+
+func (q *Queries) UpdateViolationType(ctx context.Context, arg UpdateViolationTypeParams) (ViolationType, error) {
+	row := q.db.QueryRow(ctx, updateViolationType,
+		arg.Kode,
+		arg.Nama,
+		arg.Kategori,
+		arg.PoinDefault,
+		arg.IsActive,
+		arg.ID,
+		arg.SchoolID,
+	)
+	var i ViolationType
+	err := row.Scan(
+		&i.ID,
+		&i.SchoolID,
+		&i.Kode,
+		&i.Nama,
+		&i.Kategori,
+		&i.PoinDefault,
+		&i.IsActive,
 		&i.CreatedAt,
 	)
 	return i, err

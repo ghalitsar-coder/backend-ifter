@@ -121,13 +121,36 @@ func New(d Deps) *gin.Engine {
 			disciplineHandler := newDisciplineHandler(d.Discipline, d.Logger)
 			kesiswaanOnly := middleware.RequireRoles("kesiswaan")
 			secured.GET("/discipline/types", kesiswaanOnly, disciplineHandler.ListViolationTypes)
+			secured.POST("/discipline/types", kesiswaanOnly, disciplineHandler.CreateViolationType)
+			secured.PUT("/discipline/types/:id", kesiswaanOnly, disciplineHandler.UpdateViolationType)
+			secured.DELETE("/discipline/types/:id", kesiswaanOnly, disciplineHandler.DeleteViolationType)
+
 			secured.GET("/discipline/records", kesiswaanOnly, disciplineHandler.ListViolations)
 			secured.POST("/discipline/records", kesiswaanOnly, disciplineHandler.RecordViolation)
+			secured.PUT("/discipline/records/:id", kesiswaanOnly, disciplineHandler.UpdateViolation)
 			secured.PATCH("/discipline/records/:id/followup", kesiswaanOnly, disciplineHandler.UpdateFollowup)
+			secured.DELETE("/discipline/records/:id", kesiswaanOnly, disciplineHandler.DeleteViolation)
+
 			secured.GET("/discipline/inspections", kesiswaanOnly, disciplineHandler.ListInspections)
 			secured.POST("/discipline/inspections", kesiswaanOnly, disciplineHandler.CreateInspection)
+			secured.PUT("/discipline/inspections/:id", kesiswaanOnly, disciplineHandler.UpdateInspection)
+			secured.DELETE("/discipline/inspections/:id", kesiswaanOnly, disciplineHandler.DeleteInspection)
+
+			secured.GET("/discipline/students", kesiswaanOnly, disciplineHandler.ListSchoolStudents)
 			secured.GET("/discipline/students/:id/summary", kesiswaanOnly, disciplineHandler.GetStudentSummary)
+			secured.GET("/discipline/watchlist", kesiswaanOnly, disciplineHandler.ListWatchlist)
 			secured.GET("/discipline/classes/:id/students", kesiswaanOnly, disciplineHandler.ListClassStudents)
+
+			secured.GET("/discipline/counseling", kesiswaanOnly, disciplineHandler.ListCounselingRecords)
+			secured.POST("/discipline/counseling", kesiswaanOnly, disciplineHandler.CreateCounselingRecord)
+			secured.PUT("/discipline/counseling/:id", kesiswaanOnly, disciplineHandler.UpdateCounselingRecord)
+			secured.DELETE("/discipline/counseling/:id", kesiswaanOnly, disciplineHandler.DeleteCounselingRecord)
+
+			secured.GET("/discipline/summons", kesiswaanOnly, disciplineHandler.ListParentSummons)
+			secured.POST("/discipline/summons", kesiswaanOnly, disciplineHandler.CreateParentSummons)
+			secured.PUT("/discipline/summons/:id", kesiswaanOnly, disciplineHandler.UpdateParentSummons)
+			secured.PATCH("/discipline/summons/:id/status", kesiswaanOnly, disciplineHandler.UpdateParentSummonsStatus)
+			secured.DELETE("/discipline/summons/:id", kesiswaanOnly, disciplineHandler.DeleteParentSummons)
 		}
 
 		secured.GET("/admin/ping", middleware.RequireRoles("admin"), func(c *gin.Context) {
